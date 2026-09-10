@@ -1,0 +1,40 @@
+{
+  "name": "x-feed",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "tsx index.ts",
+    "build:api": "npx tsc",
+    "build:webui": "cd webui && npm run build",
+    "build": "npm run build:api && npm run build:webui",
+    "start:api": "node ./dist/index.js",
+    "start:webui": "npm run start --prefix webui",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.5.0",
+    "@types/pg": "^8.23.1",
+    "prisma": "^7.10.0",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.10.0",
+    "@prisma/client": "^7.10.0",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "grammy": "^1.46.0",
+    "linkedom": "^0.18.13",
+    "pg": "^8.23.0",
+    "socket.io": "^4.8.3",
+    "x-client-transaction-id": "^0.3.1"
+  }
+}

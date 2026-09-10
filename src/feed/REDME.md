@@ -1,0 +1,2 @@
+# Feed page 
+how to work user usersbyids from twitterclien to fetch users example 100 at a time rate limit 100 per 15 minites return user profile this profile user info with tweets this tweets count store on db when new fetch compaire old stored tweets count is less then new fetch tweets count that's means this user new tweet detect this new fetch user tweets with fxtwitter to get latest tweet this is work is feed. feed send to frontend with socket.io for realtime 
