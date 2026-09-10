@@ -8,7 +8,7 @@
     "build:api": "npx tsc",
     "build:webui": "cd webui && npm run build",
     "build": "npm run build:api && npm run build:webui",
-    "start:api": "node ./dist/index.js",
+    "start": "node ./dist/index.js",
     "start:webui": "npm run start --prefix webui",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
