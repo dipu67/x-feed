@@ -1,4 +1,9 @@
-import type { FeedPayload, FeedQuote, FeedQuotedStatus } from "@/lib/types";
+import type {
+  FeedItem,
+  FeedPayload,
+  FeedQuote,
+  FeedQuotedStatus,
+} from "@/lib/types";
 
 const X_ORIGIN = "https://x.com";
 
@@ -23,6 +28,12 @@ export function statusUrl(
 
 export type PostKind = "repost" | "quote" | "reply";
 
+export const KIND_LABEL: Record<PostKind, string> = {
+  repost: "Repost",
+  quote: "Quote",
+  reply: "Reply",
+};
+
 /** Every relation the item carries — a tweet can be a reply *and* a quote. */
 export function postKinds(payload: FeedPayload | null | undefined): PostKind[] {
   const kinds: PostKind[] = [];
@@ -30,6 +41,23 @@ export function postKinds(payload: FeedPayload | null | undefined): PostKind[] {
   if (payload?.quote) kinds.push("quote");
   if (payload?.replying_to) kinds.push("reply");
   return kinds;
+}
+
+/**
+ * Who to credit for an item. On a repost the author is the original poster, so
+ * the tracked project's own name/avatar must not stand in for them.
+ */
+export function resolveAuthor(item: FeedItem) {
+  const author = item.payload?.author;
+  const handle = author?.screen_name ?? item.username;
+  const isProject =
+    handle.toLowerCase() === item.project.username.toLowerCase();
+  return {
+    handle,
+    displayName: author?.name ?? (isProject ? item.project.name : null) ?? handle,
+    avatar: author?.avatar_url ?? (isProject ? item.project.profileImageUrl : null),
+    profileHref: author?.url ?? profileUrl(handle) ?? undefined,
+  };
 }
 
 export function isQuotedStatus(quote: FeedQuote): quote is FeedQuotedStatus {

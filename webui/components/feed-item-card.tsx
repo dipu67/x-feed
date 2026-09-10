@@ -21,18 +21,13 @@ import type {
 import { cn } from "@/lib/utils";
 import {
   isQuotedStatus,
+  KIND_LABEL,
   postKinds,
   profileUrl,
   quotedPostedAt,
+  resolveAuthor,
   statusUrl,
-  type PostKind,
 } from "@/lib/x";
-
-const KIND_LABEL: Record<PostKind, string> = {
-  repost: "Repost",
-  quote: "Quote",
-  reply: "Reply",
-};
 
 function initials(name: string) {
   return name.slice(0, 2).toUpperCase();
@@ -214,15 +209,9 @@ export function FeedItemCard({
 
   // On a repost the author is the original poster, so the project's own
   // name/avatar must not stand in for them.
-  const handle = author?.screen_name ?? item.username;
-  const isProjectAuthor =
-    handle.toLowerCase() === item.project.username.toLowerCase();
-  const avatar =
-    author?.avatar_url ?? (isProjectAuthor ? item.project.profileImageUrl : null);
-  const displayName =
-    author?.name ?? (isProjectAuthor ? item.project.name : null) ?? handle;
+  const { handle, displayName, avatar, profileHref: authorHref } =
+    resolveAuthor(item);
 
-  const authorHref = author?.url ?? profileUrl(handle) ?? undefined;
   const tweetHref =
     item.tweetUrl ??
     payload?.url ??
