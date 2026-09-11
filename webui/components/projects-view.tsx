@@ -204,7 +204,7 @@ export function ProjectsView() {
                       <div className="min-w-0">
                         <div className="truncate font-medium">{project.name}</div>
                         <div className="truncate text-sm text-muted-foreground">
-                          @{project.username}
+                          <a href={`https://x.com/${project.username}`} target="_blank">@{project.username}</a>
                         </div>
                       </div>
                     </div>
