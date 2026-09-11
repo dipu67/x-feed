@@ -103,3 +103,83 @@ export function sendWebhookProject(input: ProjectInput, secret?: string) {
     body: JSON.stringify(input),
   });
 }
+
+// ── Growth ────────────────────────────────────────────────────────────────
+
+export type GrowthChange = {
+  /** username | name | bio | avatar | location | verified | status */
+  field: string;
+  oldValue: string | null;
+  newValue: string | null;
+  changedAt: string;
+};
+
+export type GrowthLatestTweet = {
+  id: string;
+  text: string;
+  tweetUrl: string;
+  postedAt: string;
+  likes: number;
+  reposts: number;
+  replies: number;
+};
+
+export type GrowthUser = {
+  userId: string;
+  username: string;
+  twitterName: string | null;
+  twitterBio: string | null;
+  location: string | null;
+  isBlueVerified: boolean;
+  followers: number;
+  following: number;
+  tweets: number;
+  description: string | null;
+  website: string | null;
+  github: string | null;
+  chain: string | null;
+  tokenAddress: string | null;
+  profileImageUrl: string | null;
+  status: string;
+  statusReason: string | null;
+  statusChangedAt: string | null;
+  lastSeenAt: string | null;
+  missedChecks: number;
+  lastFetchedAt: string | null;
+  /**
+   * Net change inside the selected window, summed from the
+   * `ProjectChange` log (every metric move in the window contributes its
+   * new−old delta). Always a number; `0` means no movement in the window.
+   */
+  followersDelta: number;
+  followingDelta: number;
+  tweetsDelta: number;
+  changes: GrowthChange[];
+  tweetsInWindow: number;
+  latestTweet: GrowthLatestTweet | null;
+};
+
+export type GrowthRange = "1h" | "12h" | "24h" | "7d" | "all";
+
+export type GrowthResponse = {
+  range: GrowthRange;
+  /** Lower bound of the window. `undefined` when `range = "all"`. */
+  since: string | undefined;
+  generatedAt: string;
+  count: number;
+  users: GrowthUser[];
+};
+
+export async function fetchGrowth(params: {
+  range?: GrowthRange;
+  sortBy?: "userId" | "growth";
+  sortOrder?: "asc" | "desc";
+  userId?: string;
+}) {
+  const q = new URLSearchParams();
+  if (params.range) q.set("range", params.range);
+  if (params.sortBy) q.set("sortBy", params.sortBy);
+  if (params.sortOrder) q.set("sortOrder", params.sortOrder);
+  if (params.userId) q.set("userId", params.userId);
+  return request<GrowthResponse>(`/growth?${q.toString()}`);
+}

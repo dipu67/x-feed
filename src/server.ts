@@ -4,6 +4,7 @@ import { Server } from "socket.io";
 import { startFeedWorker } from "./feed/feed.js";
 import { authTokensRouter } from "./routes/auth-tokens.js";
 import { feedRouter } from "./routes/feed.js";
+import { growthRouter } from "./routes/growth.js";
 import { projectsRouter } from "./routes/projects.js";
 import { webhooksRouter } from "./routes/webhooks.js";
 
@@ -37,6 +38,7 @@ export function createApp() {
   app.use("/auth-tokens", authTokensRouter);
   app.use("/webhooks", webhooksRouter);
   app.use("/feed", feedRouter);
+  app.use("/growth", growthRouter);
 
   return app;
 }

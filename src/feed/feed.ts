@@ -5,6 +5,12 @@ import type { APITwitterStatus } from "../fxTwitter/types.js";
 import { chunk } from "../lib/chunk.js";
 import { sleep } from "../lib/sleep.js";
 import { getTwitterClient } from "../twitter/getClient.js";
+import {
+  applyUserAbsence,
+  applyUserPresence,
+  type ProjectSnapshotInput,
+} from "../services/tracking.js";
+import type { UserData } from "../TwitterClient/types.js";
 
 const BATCH_SIZE = 100;
 const CYCLE_MS =  60 * 1000; // every 60s
@@ -105,6 +111,35 @@ async function runCycle(io: FeedSocket): Promise<void> {
     return;
   }
 
+  // Seed baseline snapshots for any project that has none yet, so the growth
+  // route has a reference value for any "all" / wide window. This is a
+  // one-shot per project for the lifetime of the DB.
+  const withoutSnapshot = await prisma.project.findMany({
+    where: { snapshots: { none: {} } },
+    select: {
+      userId: true,
+      followers: true,
+      following: true,
+      tweets: true,
+      status: true,
+    },
+  });
+  if (withoutSnapshot.length > 0) {
+    await prisma.projectSnapshot.createMany({
+      data: withoutSnapshot.map((p) => ({
+        projectId: p.userId,
+        followers: p.followers,
+        following: p.following,
+        tweets: p.tweets,
+        status: p.status,
+        capturedAt: new Date(),
+      })),
+    });
+    console.log(
+      `[feed] seeded ${withoutSnapshot.length} baseline snapshot(s)`,
+    );
+  }
+
   const byUserId = new Map(projects.map((project) => [project.userId, project]));
   const client = await getTwitterClient();
   const batches = chunk(
@@ -116,9 +151,15 @@ async function runCycle(io: FeedSocket): Promise<void> {
     `[feed] polling ${projects.length} projects in ${batches.length} batch(es)`,
   );
 
+  // Track which projects were returned by X this cycle so the absence pass
+  // below can mark suspended/missing ones.
+  const presentIds = new Set<string>();
+
   for (const userIds of batches) {
     const result = await client.getUsersByIds(userIds);
     if (!result.success || !result.users) {
+      // A hard API failure (rate limit, network) is NOT a suspension signal —
+      // the whole batch is missing, so don't run the absence pass.
       console.error("[feed] usersByIds failed:", result.error);
       if (result.rateLimit && result.rateLimit.remaining <= 0) {
         await waitForRateLimit(result.rateLimit.reset);
@@ -129,6 +170,7 @@ async function runCycle(io: FeedSocket): Promise<void> {
     for (const user of result.users) {
       const project = byUserId.get(user.id);
       if (!project) continue;
+      presentIds.add(user.id);
 
       const newCount = user.tweetCount ?? project.tweets;
       const hadNewTweets = newCount > project.tweets;
@@ -152,25 +194,81 @@ async function runCycle(io: FeedSocket): Promise<void> {
         );
       }
 
+      // Persist metrics + profile fields via the tracking service: it writes
+      // a ProjectChange row only when something actually moved and snapshots
+      // on movement. Reset missedChecks (the user is visible to X).
+      const trackingInput = toTrackingInput(project, user);
+      const { changes, statusChanged } = await applyUserPresence(
+        trackingInput,
+        user,
+      );
+
       await prisma.project.update({
         where: { userId: project.userId },
         data: {
-          username: user.username,
-          twitterName: user.name,
-          followers: user.followersCount ?? project.followers,
-          following: user.followingCount ?? project.following,
-          tweets: newCount,
-          profileImageUrl: user.profileImageUrl ?? project.profileImageUrl,
           fxTwitterCursorTop: cursorTop,
           lastFetchedAt: new Date(),
         },
       });
+
+      if (changes.length > 0) {
+        console.log(
+          `[feed] @${project.username} changed: ${changes
+            .map((c) => c.field)
+            .join(", ")}`,
+        );
+      }
+      if (statusChanged) {
+        console.log(`[feed] @${project.username} back to active`);
+      }
+    }
+
+    // Absence pass: any requested id X did not return for this successful
+    // batch is missing. A single miss doesn't change status; three
+    // consecutive misses mark the account suspended.
+    for (const missingId of userIds) {
+      if (presentIds.has(missingId)) continue;
+      const project = byUserId.get(missingId);
+      if (!project) continue;
+      const result = await applyUserAbsence(toTrackingInput(project));
+      if (result.statusChanged) {
+        console.log(
+          `[feed] @${project.username} marked suspended (${result.missedChecks} consecutive misses)`,
+        );
+      }
     }
 
     if (result.rateLimit && result.rateLimit.remaining <= 0) {
       await waitForRateLimit(result.rateLimit.reset);
     }
   }
+}
+
+/**
+ * Shape a Project row (joined with the fields applyUserPresence uses) so the
+ * tracking service can diff it against a fresh X user payload.
+ */
+function toTrackingInput(
+  project: Awaited<ReturnType<typeof prisma.project.findMany>>[number],
+  user?: UserData,
+): ProjectSnapshotInput {
+  return {
+    userId: project.userId,
+    username: project.username,
+    twitterName: project.twitterName,
+    twitterBio: project.twitterBio,
+    location: project.location,
+    isBlueVerified: project.isBlueVerified,
+    profileImageUrl: project.profileImageUrl,
+    website: project.website,
+    followers: project.followers,
+    following: project.following,
+    tweets: project.tweets,
+    status: project.status,
+    missedChecks: project.missedChecks,
+  };
+  // Suppress unused warning when `user` not provided (presence calls).
+  void user;
 }
 
 export function startFeedWorker(io: FeedSocket): void {

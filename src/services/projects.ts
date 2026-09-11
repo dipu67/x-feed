@@ -43,6 +43,9 @@ export function mapProject(project: {
   name: string;
   username: string;
   twitterName: string | null;
+  twitterBio: string | null;
+  location: string | null;
+  isBlueVerified: boolean;
   followers: number;
   following: number;
   tweets: number;
@@ -52,6 +55,11 @@ export function mapProject(project: {
   chain: string | null;
   tokenAddress: string | null;
   profileImageUrl: string | null;
+  status: string;
+  statusReason: string | null;
+  statusChangedAt: Date | null;
+  lastSeenAt: Date | null;
+  missedChecks: number;
   lastFetchedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -61,6 +69,9 @@ export function mapProject(project: {
     name: project.name,
     username: project.username,
     twitterName: project.twitterName,
+    twitterBio: project.twitterBio,
+    location: project.location,
+    isBlueVerified: project.isBlueVerified,
     followers: project.followers,
     following: project.following,
     tweets: project.tweets,
@@ -70,6 +81,11 @@ export function mapProject(project: {
     chain: project.chain,
     tokenAddress: project.tokenAddress,
     profileImageUrl: project.profileImageUrl,
+    status: project.status,
+    statusReason: project.statusReason,
+    statusChangedAt: project.statusChangedAt?.toISOString() ?? null,
+    lastSeenAt: project.lastSeenAt?.toISOString() ?? null,
+    missedChecks: project.missedChecks,
     lastFetchedAt: project.lastFetchedAt?.toISOString() ?? null,
     createdAt: project.createdAt.toISOString(),
     updatedAt: project.updatedAt.toISOString(),
@@ -138,6 +154,9 @@ export async function createProject(input: ProjectInput) {
       userId: profile.userId,
       username: profile.username,
       twitterName: profile.twitterName,
+      twitterBio: optionalText(user.description ?? null) ?? null,
+      location: optionalText(user.location ?? null) ?? null,
+      isBlueVerified: false,
       followers: profile.followers,
       following: profile.following,
       tweets: profile.tweets,
@@ -149,6 +168,17 @@ export async function createProject(input: ProjectInput) {
       github: optionalText(input.github) ?? null,
       chain: optionalText(input.chain) ?? null,
       tokenAddress: optionalText(input.tokenAddress) ?? null,
+    },
+  });
+  // Seed an initial snapshot so the growth route has a reference value.
+  await prisma.projectSnapshot.create({
+    data: {
+      projectId: project.userId,
+      followers: project.followers,
+      following: project.following,
+      tweets: project.tweets,
+      status: project.status,
+      capturedAt: new Date(),
     },
   });
   return mapProject(project);
@@ -164,6 +194,8 @@ export async function upsertProjectFromWebhook(input: ProjectInput) {
     userId: profile.userId,
     username: profile.username,
     twitterName: profile.twitterName,
+    twitterBio: optionalText(user.description ?? null) ?? null,
+    location: optionalText(user.location ?? null) ?? null,
     followers: profile.followers,
     following: profile.following,
     tweets: profile.tweets,
@@ -180,6 +212,8 @@ export async function upsertProjectFromWebhook(input: ProjectInput) {
   const update: Prisma.ProjectUncheckedUpdateInput = {
     username: profile.username,
     twitterName: profile.twitterName,
+    twitterBio: optionalText(user.description ?? null) ?? null,
+    location: optionalText(user.location ?? null) ?? null,
     followers: profile.followers,
     following: profile.following,
     tweets: profile.tweets,
@@ -207,6 +241,25 @@ export async function upsertProjectFromWebhook(input: ProjectInput) {
     create: data,
     update,
   });
+
+  // Seed a snapshot if this is a fresh insert (matches the per-cycle seeder
+  // in feed.runCycle, but covers webhook-driven upserts).
+  const hasSnapshot = await prisma.projectSnapshot.findFirst({
+    where: { projectId: project.userId },
+    select: { id: true },
+  });
+  if (!hasSnapshot) {
+    await prisma.projectSnapshot.create({
+      data: {
+        projectId: project.userId,
+        followers: project.followers,
+        following: project.following,
+        tweets: project.tweets,
+        status: project.status,
+        capturedAt: new Date(),
+      },
+    });
+  }
 
   return mapProject(project);
 }
@@ -239,6 +292,8 @@ export async function updateProject(userId: string, input: ProjectInput) {
     }
     data.username = user.screen_name;
     data.twitterName = user.name;
+    data.twitterBio = optionalText(user.description ?? null) ?? null;
+    data.location = optionalText(user.location ?? null) ?? null;
     data.followers = user.followers;
     data.following = user.following;
     data.tweets = user.statuses;

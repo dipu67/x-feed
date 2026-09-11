@@ -3,6 +3,9 @@ export type Project = {
   name: string;
   username: string;
   twitterName: string | null;
+  twitterBio: string | null;
+  location: string | null;
+  isBlueVerified: boolean;
   followers: number;
   following: number;
   tweets: number;
@@ -12,7 +15,12 @@ export type Project = {
   chain: string | null;
   tokenAddress: string | null;
   profileImageUrl: string | null;
-  lastTweetId: string | null;
+  /** active | suspended | unavailable | not_found */
+  status: string;
+  statusReason: string | null;
+  statusChangedAt: string | null;
+  lastSeenAt: string | null;
+  missedChecks: number;
   lastFetchedAt: string | null;
   createdAt: string;
   updatedAt: string;
