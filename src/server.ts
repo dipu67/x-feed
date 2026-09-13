@@ -48,6 +48,7 @@ export function startServer(port = Number(process.env.PORT ?? 5500)) {
   const httpServer = createServer(app);
   const io = new Server(httpServer, {
     cors: { origin: "*" },
+    pingInterval: 25000
   });
 
   io.on("connection", (socket) => {

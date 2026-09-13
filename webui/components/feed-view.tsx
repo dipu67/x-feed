@@ -36,6 +36,7 @@ export function FeedView() {
   // resubscribing whenever the toggle or the item list changes.
   const notifyRef = useRef(notifications.notify);
   const seenRef = useRef<Set<string>>(new Set());
+  const socketRef = useRef<ReturnType<typeof io> | null>(null);
 
   useEffect(() => {
     notifyRef.current = notifications.notify;
@@ -70,8 +71,32 @@ export function FeedView() {
   }, []);
 
   useEffect(() => {
-    const socket = io(SOCKET_URL, { transports: ["websocket", "polling"] });
-    socket.on("connect", () => setConnected(true));
+    const socket = io(SOCKET_URL, {
+      transports: ["websocket", "polling"],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 30000,
+      // Android Chrome may drop idle WebSockets after ~30 s in background.
+      // Use polling as a fallback and keep pinging every 25 s.
+    });
+    socketRef.current = socket;
+
+    socket.on("connect", () => {
+      setConnected(true);
+      // After a reconnect, re-fetch to catch any items missed while offline.
+      fetchFeed()
+        .then((data) => {
+          const rows = data.items ?? [];
+          rows.forEach((row) => seenRef.current.add(row.id));
+          setItems((current) => {
+            const fetched = new Set(rows.map((row) => row.id));
+            const live = (current ?? []).filter((row) => !fetched.has(row.id));
+            return [...live, ...rows];
+          });
+        })
+        .catch(() => {});
+    });
     socket.on("disconnect", () => setConnected(false));
     socket.on("feed:new", (item: FeedItem) => {
       // The poller re-emits items it re-upserts, so drop repeats before they
@@ -97,6 +122,20 @@ export function FeedView() {
     return () => {
       socket.disconnect();
     };
+  }, []);
+
+  // Android Chrome freezes background tabs — reconnect when the user returns.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        const socket = socketRef.current;
+        if (socket && !socket.connected) {
+          socket.connect();
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
 
   const liveLabel = useMemo(

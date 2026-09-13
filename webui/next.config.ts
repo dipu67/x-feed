@@ -11,6 +11,7 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: import.meta.dirname,
   },
+  allowedDevOrigins: ['192.168.0.102'],
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "pbs.twimg.com" },

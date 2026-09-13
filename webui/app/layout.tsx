@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Providers } from "@/components/providers";
@@ -20,9 +20,25 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#171717",
+};
+
 export const metadata: Metadata = {
   title: "x-feed",
   description: "Realtime Twitter feed for tracked projects",
+  icons: {
+    icon: "/favicon.ico",
+  },
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "x-feed",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
