@@ -1,5 +1,3 @@
-"use client";
-
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { FeedItem } from "@/lib/types";
@@ -143,9 +141,14 @@ export function useTweetNotifications() {
         window.open(item.tweetUrl, "_blank", "noopener,noreferrer");
         notification.close();
       };
-    } catch {
+    } catch (e) {
       // Some browsers (notably Android Chrome) only allow notifications via a
       // service worker; the sound below still fires.
+      // For Android, we still fire the sound even if the Notification fails.
+      if (e instanceof Error && /service worker/i.test(e.message)) {
+        playChime(audioContext());
+        return;
+      }
     }
 
     const now = Date.now();
