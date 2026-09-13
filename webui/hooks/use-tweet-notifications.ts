@@ -30,6 +30,22 @@ function playChime(ctx: AudioContext) {
   });
 }
 
+/**
+ * Resolves the active service worker registration, if available.
+ * Android Chrome requires a service worker to show system notifications.
+ */
+let swReady: Promise<ServiceWorkerRegistration | null> | null = null;
+function getServiceWorkerRegistration() {
+  if (typeof window === "undefined" || !("serviceWorker" in navigator))
+    return Promise.resolve(null);
+  if (!swReady) {
+    swReady = navigator.serviceWorker
+      .register("/sw.js")
+      .catch(() => null);
+  }
+  return swReady;
+}
+
 function notificationText(item: FeedItem) {
   const { displayName, handle, avatar } = resolveAuthor(item);
   const [kind] = postKinds(item.payload);
@@ -131,25 +147,44 @@ export function useTweetNotifications() {
     }
 
     const { title, body, icon } = notificationText(item);
-    try {
-      const notification = new Notification(title, {
-        body,
-        icon,
-        tag: item.id, // collapses duplicates of the same tweet
-      });
-      notification.onclick = () => {
-        window.open(item.tweetUrl, "_blank", "noopener,noreferrer");
-        notification.close();
-      };
-    } catch (e) {
-      // Some browsers (notably Android Chrome) only allow notifications via a
-      // service worker; the sound below still fires.
-      // For Android, we still fire the sound even if the Notification fails.
-      if (e instanceof Error && /service worker/i.test(e.message)) {
-        playChime(audioContext());
-        return;
+
+    // Service-worker path — required on Android Chrome.
+    const swPromise = getServiceWorkerRegistration();
+    swPromise.then(async (sw) => {
+      if (sw) {
+        try {
+          await sw.showNotification(title, {
+            body,
+            icon,
+            tag: item.id,
+            data: { url: item.tweetUrl },
+          });
+          return; // notification shown, play sound below
+        } catch {
+          // Fall through to main-thread path.
+        }
       }
-    }
+
+      // Main-thread path — works on desktop browsers.
+      try {
+        const notification = new Notification(title, {
+          body,
+          icon,
+          tag: item.id,
+        });
+        notification.onclick = () => {
+          window.open(item.tweetUrl, "_blank", "noopener,noreferrer");
+          notification.close();
+        };
+      } catch (e) {
+        // Some browsers (notably Android Chrome) only allow notifications via a
+        // service worker; the sound below still fires.
+        if (e instanceof Error && /service worker/i.test(e.message)) {
+          playChime(audioContext());
+          return;
+        }
+      }
+    });
 
     const now = Date.now();
     if (now - lastSoundRef.current < SOUND_COOLDOWN_MS) return;
