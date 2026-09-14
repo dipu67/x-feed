@@ -184,7 +184,7 @@ function QuotedTweet({ quote }: { quote: FeedQuote }) {
         </span>
       </div>
       {quote.text ? (
-        <p className="mt-1 whitespace-pre-wrap text-sm leading-6">
+        <p className="mt-1 break-words whitespace-pre-wrap text-sm leading-6">
           {quote.text}
         </p>
       ) : null}
@@ -295,7 +295,7 @@ export function FeedItemCard({
               Replying to @{replyingTo.screen_name}
             </a>
           ) : null}
-          <p className="mt-1 whitespace-pre-wrap text-sm leading-6">
+          <p className="mt-1 break-words whitespace-pre-wrap text-sm leading-6">
             {item.text}
           </p>
           <Media media={payload?.media} className="mt-3" />

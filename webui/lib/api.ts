@@ -147,9 +147,8 @@ export type GrowthUser = {
   missedChecks: number;
   lastFetchedAt: string | null;
   /**
-   * Net change inside the selected window, summed from the
-   * `ProjectChange` log (every metric move in the window contributes its
-   * new−old delta). Always a number; `0` means no movement in the window.
+   * Net change from the newest snapshot at or before the selected window's
+   * start. Always a number; `0` means no pre-window baseline or no movement.
    */
   followersDelta: number;
   followingDelta: number;

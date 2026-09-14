@@ -144,7 +144,7 @@ export function FeedView() {
   );
 
   return (
-    <div className="mx-auto w-full max-w-2xl">
+    <div className="mx-auto w-full min-w-0 max-w-2xl overflow-x-clip">
       <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-background/80 px-4 py-3 backdrop-blur">
         <div>
           <h1 className="text-lg font-semibold">Feed</h1>

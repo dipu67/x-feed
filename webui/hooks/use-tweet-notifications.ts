@@ -7,6 +7,7 @@ const STORAGE_KEY = "x-feed:notifications";
 /** Bursts of tweets shouldn't machine-gun the chime. */
 const SOUND_COOLDOWN_MS = 800;
 const BODY_MAX = 160;
+const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 
 /**
  * A short two-note chime, synthesized rather than shipped as an audio file.
@@ -36,14 +37,95 @@ function playChime(ctx: AudioContext) {
  */
 let swReady: Promise<ServiceWorkerRegistration | null> | null = null;
 function getServiceWorkerRegistration() {
-  if (typeof window === "undefined" || !("serviceWorker" in navigator))
+  if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
     return Promise.resolve(null);
+  }
   if (!swReady) {
+    // `register()` may resolve before the worker controls the page. Android
+    // only accepts notifications from an active service worker, so wait for it.
     swReady = navigator.serviceWorker
       .register("/sw.js")
+      .then(() => navigator.serviceWorker.ready)
       .catch(() => null);
   }
   return swReady;
+}
+
+function base64UrlToUint8Array(value: string) {
+  const padded = value
+    .replace(/-/g, "+")
+    .replace(/_/g, "/")
+    .padEnd(Math.ceil(value.length / 4) * 4, "=");
+  const binary = window.atob(padded);
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+}
+
+type BrowserPushSubscription = {
+  endpoint: string;
+  expirationTime: number | null;
+  keys: { p256dh: string; auth: string };
+  userAgent: string;
+};
+
+function serializePushSubscription(
+  subscription: PushSubscription,
+): BrowserPushSubscription {
+  const json = subscription.toJSON();
+  const p256dh = json.keys?.p256dh;
+  const auth = json.keys?.auth;
+  if (!p256dh || !auth) {
+    throw new Error("Browser returned an incomplete push subscription");
+  }
+  return {
+    endpoint: subscription.endpoint,
+    expirationTime: subscription.expirationTime,
+    keys: { p256dh, auth },
+    userAgent: navigator.userAgent,
+  };
+}
+
+async function savePushSubscription(subscription: PushSubscription) {
+  const response = await fetch("/api/push/subscriptions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(serializePushSubscription(subscription)),
+  });
+  if (!response.ok) {
+    throw new Error("Could not save this device for background notifications");
+  }
+}
+
+async function subscribeToPush() {
+  if (!VAPID_PUBLIC_KEY) {
+    throw new Error("Background notifications have not been configured yet");
+  }
+  const registration = await getServiceWorkerRegistration();
+  if (!registration || !("PushManager" in window)) {
+    throw new Error("Push notifications are not supported by this browser");
+  }
+
+  const existing = await registration.pushManager.getSubscription();
+  const subscription =
+    existing ??
+    (await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: base64UrlToUint8Array(VAPID_PUBLIC_KEY),
+    }));
+  await savePushSubscription(subscription);
+}
+
+async function unsubscribeFromPush() {
+  const registration = await getServiceWorkerRegistration();
+  const subscription = await registration?.pushManager.getSubscription();
+  if (!subscription) return;
+
+  const endpoint = subscription.endpoint;
+  await subscription.unsubscribe();
+  await fetch("/api/push/subscriptions", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ endpoint }),
+  });
 }
 
 function notificationText(item: FeedItem) {
@@ -77,6 +159,12 @@ export function useTweetNotifications() {
     const ok = typeof window !== "undefined" && "Notification" in window;
     setSupported(ok);
     if (!ok) return;
+
+    // Register before a tweet arrives. Registering only inside `notify` is too
+    // late on Android: its main-thread Notification API is unavailable and the
+    // worker may not be active until after the event has been handled.
+    void getServiceWorkerRegistration();
+
     setPermission(Notification.permission);
     // Only trust the stored preference while permission is still granted —
     // the user may have revoked it in browser settings since.
@@ -115,6 +203,12 @@ export function useTweetNotifications() {
     async (next: boolean) => {
       if (!next) {
         apply(false);
+        try {
+          await unsubscribeFromPush();
+        } catch {
+          // The local preference still disables foreground notifications. The
+          // server removes invalid endpoints automatically on the next send.
+        }
         return;
       }
       if (!("Notification" in window)) return;
@@ -129,6 +223,19 @@ export function useTweetNotifications() {
         apply(false);
         toast.error("Notifications are blocked", {
           description: "Allow notifications for this site in your browser settings.",
+        });
+        return;
+      }
+
+      try {
+        await subscribeToPush();
+      } catch (error) {
+        apply(false);
+        toast.error("Could not enable background notifications", {
+          description:
+            error instanceof Error
+              ? error.message
+              : "Try again after the app has finished loading.",
         });
         return;
       }
