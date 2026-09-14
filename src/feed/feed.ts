@@ -4,6 +4,7 @@ import { fetchProfileStatusesPage } from "../fxTwitter/statuses.js";
 import type { APITwitterStatus } from "../fxTwitter/types.js";
 import { chunk } from "../lib/chunk.js";
 import { sleep } from "../lib/sleep.js";
+import { sendTweetPushNotification } from "../services/push.js";
 import { getTwitterClient } from "../twitter/getClient.js";
 import {
   applyUserAbsence,
@@ -67,19 +68,29 @@ async function persistAndEmit(
   const created = [];
   for (const status of statuses) {
     const data = toFeedPayload(status, project.userId);
-    const item = await prisma.feedItem.upsert({
+    const existing = await prisma.feedItem.findUnique({
       where: { id: data.id },
-      create: data,
-      update: {
-        text: data.text,
-        likes: data.likes,
-        reposts: data.reposts,
-        replies: data.replies,
-        payload: data.payload,
-      },
+      select: { id: true },
     });
+    const item = existing
+      ? await prisma.feedItem.update({
+          where: { id: data.id },
+          data: {
+            text: data.text,
+            likes: data.likes,
+            reposts: data.reposts,
+            replies: data.replies,
+            payload: data.payload,
+          },
+        })
+      : await prisma.feedItem.create({ data });
+
+    // A push is only for a newly detected post. Existing items are refreshed
+    // for engagement counts on later cycles and must not notify again.
+    if (existing) continue;
+
     created.push(item);
-    io.emit("feed:new", {
+    const feedEvent = {
       id: item.id,
       projectId: item.projectId,
       username: item.username,
@@ -99,6 +110,14 @@ async function persistAndEmit(
         tokenAddress: project.tokenAddress,
         profileImageUrl: project.profileImageUrl,
       },
+    };
+    io.emit("feed:new", feedEvent);
+    void sendTweetPushNotification({
+      id: item.id,
+      title: `New tweet · ${project.name}`,
+      body: item.text.slice(0, 240),
+      icon: project.profileImageUrl,
+      url: item.tweetUrl,
     });
   }
   return created;

@@ -111,9 +111,25 @@ model ProjectChange {
   changedAt DateTime @default(now()) @map("changed_at") @db.Timestamptz
 
   @@index([projectId, changedAt(sort: Desc)])
+  @@index([projectId, field, changedAt(sort: Desc)])
   @@index([changedAt(sort: Desc)])
   @@index([field])
   @@map("project_changes")
+}
+
+/// A browser/device endpoint that opted into Web Push. No application account
+/// is required yet, so subscriptions are intentionally device-scoped.
+model PushSubscription {
+  id             BigInt    @id @default(autoincrement())
+  endpoint       String    @unique
+  p256dh         String
+  auth           String
+  expirationTime DateTime? @map("expiration_time") @db.Timestamptz
+  userAgent      String?   @map("user_agent")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("push_subscriptions")
 }
 
 model FeedItem {
@@ -132,5 +148,6 @@ model FeedItem {
 
   @@index([detectedAt(sort: Desc)])
   @@index([projectId])
+  @@index([projectId, postedAt(sort: Desc)])
   @@map("feed_items")
 }

@@ -6,6 +6,7 @@ import { authTokensRouter } from "./routes/auth-tokens.js";
 import { feedRouter } from "./routes/feed.js";
 import { growthRouter } from "./routes/growth.js";
 import { projectsRouter } from "./routes/projects.js";
+import { pushRouter } from "./routes/push.js";
 import { webhooksRouter } from "./routes/webhooks.js";
 
 export function createApp() {
@@ -39,6 +40,7 @@ export function createApp() {
   app.use("/webhooks", webhooksRouter);
   app.use("/feed", feedRouter);
   app.use("/growth", growthRouter);
+  app.use("/push", pushRouter);
 
   return app;
 }

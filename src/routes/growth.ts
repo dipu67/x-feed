@@ -29,40 +29,26 @@ function rangeToSince(range: RangeKey): Date | null {
   }
 }
 
-const METRIC_FIELDS = ["followers", "following", "tweets"] as const;
-type MetricField = (typeof METRIC_FIELDS)[number];
-
-function safeInt(value: string | null): number {
-  if (value === null || value === "") return 0;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : 0;
-}
-
 /**
- * Sum up the value-deltas of every in-window metric-change row for one
- * user. This is the source of truth for the per-window follower / following /
- * tweet deltas — it doesn't depend on having a pre-window baseline snapshot
- * (the poller only writes a snapshot when a value actually moves, so a
- * 1h window can legitimately have no baseline). The change log is
- * append-only and indexed on `[projectId, changedAt DESC]`, so this is one
- * query per user.
+ * Growth is calculated from a stable point-in-time snapshot, not from the
+ * change log. Metric change rows are deliberately coalesced by the poller;
+ * using their latest timestamp would incorrectly include part of a change
+ * that happened before a rolling-window boundary.
  */
-function sumMetricChanges(
-  rows: Array<{ field: string; oldValue: string | null; newValue: string | null }>,
-): Record<MetricField, number> {
-  const result: Record<MetricField, number> = {
-    followers: 0,
-    following: 0,
-    tweets: 0,
-  };
-  for (const row of rows) {
-    if (!METRIC_FIELDS.includes(row.field as MetricField)) continue;
-    const field = row.field as MetricField;
-    const next = safeInt(row.newValue);
-    const prev = safeInt(row.oldValue);
-    result[field] += next - prev;
+function metricDeltas(
+  current: { followers: number; following: number; tweets: number },
+  baseline: { followers: number; following: number; tweets: number } | undefined,
+) {
+  if (!baseline) {
+    // A project first tracked inside the requested window has no pre-window
+    // baseline, so do not represent its whole current count as new growth.
+    return { followers: 0, following: 0, tweets: 0 };
   }
-  return result;
+  return {
+    followers: current.followers - baseline.followers,
+    following: current.following - baseline.following,
+    tweets: current.tweets - baseline.tweets,
+  };
 }
 
 growthRouter.get("/", async (req, res) => {
@@ -76,6 +62,35 @@ growthRouter.get("/", async (req, res) => {
     const projects = await prisma.project.findMany({
       where: filterUserId ? { userId: filterUserId } : {},
       orderBy: { userId: "asc" },
+      include: {
+        // For a finite window, use the most recent value known at its start.
+        // "All" uses the earliest recorded baseline for the project.
+        snapshots: since
+          ? {
+              where: { capturedAt: { lte: since } },
+              orderBy: [{ capturedAt: "desc" }, { id: "desc" }],
+              take: 1,
+            }
+          : {
+              orderBy: [{ capturedAt: "asc" }, { id: "asc" }],
+              take: 1,
+            },
+        // Relation-local limit guarantees one latest tweet per project. A
+        // global `take: projects.length` can omit quieter projects entirely.
+        feedItems: {
+          orderBy: [{ postedAt: "desc" }, { id: "desc" }],
+          take: 1,
+          select: {
+            id: true,
+            text: true,
+            tweetUrl: true,
+            postedAt: true,
+            likes: true,
+            reposts: true,
+            replies: true,
+          },
+        },
+      },
     });
     if (projects.length === 0) {
       res.json({
@@ -109,13 +124,13 @@ growthRouter.get("/", async (req, res) => {
       changesByUser.set(c.projectId, arr);
     }
 
-    // Tweets-in-window per user (independent counter — every FeedItem the
-    // poller detected inside the window).
+    // Tweets published inside the window. Detection time can be delayed by a
+    // poll or backfill, so it is not a meaningful publication-time metric.
     const tweetsInWindow = since
       ? await prisma.feedItem.groupBy({
           by: ["projectId"],
           where: {
-            detectedAt: { gte: since },
+            postedAt: { gte: since },
             projectId: { in: projects.map((p) => p.userId) },
           },
           _count: { _all: true },
@@ -129,30 +144,9 @@ growthRouter.get("/", async (req, res) => {
       tweetsInWindow.map((row) => [row.projectId, row._count._all]),
     );
 
-    // Newest tweet per user (independent of window — always shown).
-    const latestItems = await prisma.feedItem.findMany({
-      where: {
-        projectId: { in: projects.map((p) => p.userId) },
-      },
-      orderBy: { detectedAt: "desc" },
-      take: projects.length,
-    });
-    const latestByUser = new Map<string, (typeof latestItems)[number]>();
-    for (const item of latestItems) {
-      if (!latestByUser.has(item.projectId)) {
-        latestByUser.set(item.projectId, item);
-      }
-    }
-
     const users = projects.map((project) => {
       const userChanges = changesByUser.get(project.userId) ?? [];
-      const deltas = sumMetricChanges(
-        userChanges.map((c) => ({
-          field: c.field,
-          oldValue: c.oldValue,
-          newValue: c.newValue,
-        })),
-      );
+      const deltas = metricDeltas(project, project.snapshots[0]);
 
       const formattedChanges = userChanges.map((c) => ({
         field: c.field,
@@ -161,7 +155,7 @@ growthRouter.get("/", async (req, res) => {
         changedAt: c.changedAt.toISOString(),
       }));
 
-      const latestItem = latestByUser.get(project.userId);
+      const latestItem = project.feedItems[0];
       const latestTweet = latestItem
         ? {
             id: latestItem.id,
