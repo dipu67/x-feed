@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import {
   ExternalLink,
   Eye,
@@ -31,6 +32,42 @@ import {
 
 function initials(name: string) {
   return name.slice(0, 2).toUpperCase();
+}
+
+const URL_PATTERN = /https?:\/\/[^\s<]+/gi;
+const TRAILING_URL_PUNCTUATION = /[),.!?:;\]}]+$/;
+
+/** Render HTTP(S) URLs from tweet text as external links without parsing HTML. */
+function LinkifiedText({ text }: { text: string }) {
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+
+  for (const match of text.matchAll(URL_PATTERN)) {
+    const rawUrl = match[0];
+    const start = match.index ?? cursor;
+    const url = rawUrl.replace(TRAILING_URL_PUNCTUATION, "");
+    const trailing = rawUrl.slice(url.length);
+
+    if (start > cursor) parts.push(text.slice(cursor, start));
+    if (url) {
+      parts.push(
+        <a
+          key={`${start}-${url}`}
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="break-all text-blue-500 underline underline-offset-2 hover:text-blue-400 dark:text-blue-400 dark:hover:text-blue-300"
+        >
+          {url}
+        </a>,
+      );
+    }
+    if (trailing) parts.push(trailing);
+    cursor = start + rawUrl.length;
+  }
+
+  if (cursor < text.length) parts.push(text.slice(cursor));
+  return <>{parts}</>;
 }
 
 function mediaOf(media: FeedMedia | undefined) {
@@ -296,7 +333,7 @@ export function FeedItemCard({
             </a>
           ) : null}
           <p className="mt-1 break-words whitespace-pre-wrap text-sm leading-6">
-            {item.text}
+            <LinkifiedText text={item.text} />
           </p>
           <Media media={payload?.media} className="mt-3" />
           {quote ? <QuotedTweet quote={quote} /> : null}
