@@ -4,7 +4,7 @@ import { fetchProfileStatusesPage } from "../fxTwitter/statuses.js";
 import type { APITwitterStatus } from "../fxTwitter/types.js";
 import { chunk } from "../lib/chunk.js";
 import { sleep } from "../lib/sleep.js";
-import { sendTweetPushNotification } from "../services/push.js";
+import { PushDispatcher } from "../services/push-dispatcher.js";
 import { getTwitterClient } from "../twitter/getClient.js";
 import { CircuitBreaker } from "../twitter/circuit-breaker.js";
 import { withCircuitBreaker } from "./circuit-wrapped-call.js";
@@ -25,6 +25,8 @@ function readBreakerFor(accountId: string): CircuitBreaker {
   }
   return b;
 }
+
+const pushDispatcher = new PushDispatcher();
 
 const BATCH_SIZE = 100;
 const CYCLE_MS =  60 * 1000; // every 60s
@@ -125,13 +127,7 @@ async function persistAndEmit(
       },
     };
     io.emit("feed:new", feedEvent);
-    void sendTweetPushNotification({
-      id: item.id,
-      title: `New tweet · ${project.name}`,
-      body: item.text.slice(0, 240),
-      icon: project.profileImageUrl,
-      url: item.tweetUrl,
-    });
+    void pushDispatcher.dispatchToFollowers(item);
   }
   return created;
 }
