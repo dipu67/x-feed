@@ -1,7 +1,20 @@
 import { Router } from "express";
 import { prisma } from "../db/prisma.js";
+import { requireUser } from "../auth/middleware.js";
+import { shouldShow } from "../feed/filter-evaluator.js";
 
 export const feedRouter = Router();
+
+// Apply requireUser only when the client asks for their personal filter view.
+// The default (unauthenticated) feed keeps working for logged-out viewers.
+const requireUserForMine: import("express").RequestHandler = async (req, res, next) => {
+  if (req.query.filter !== "mine") {
+    next();
+    return;
+  }
+  return requireUser(req, res, next);
+};
+feedRouter.use(requireUserForMine);
 
 feedRouter.get("/", async (req, res) => {
   try {
@@ -16,8 +29,21 @@ feedRouter.get("/", async (req, res) => {
       include: { project: true },
     });
 
+    let visible = items;
+    if (req.query.filter === "mine" && req.user) {
+      const [follows, filters, mutes] = await Promise.all([
+        prisma.userFollow.findMany({ where: { userId: req.user.id } }),
+        prisma.filter.findMany({ where: { userId: req.user.id } }),
+        prisma.muteKeyword.findMany({ where: { userId: req.user.id } }),
+      ]);
+      const followSet = new Set(follows.map((f) => f.projectId));
+      visible = items.filter((item) =>
+        shouldShow({ projectId: item.projectId, text: item.text }, followSet, filters, mutes),
+      );
+    }
+
     res.json({
-      items: items.map((item) => ({
+      items: visible.map((item) => ({
         id: item.id,
         projectId: item.projectId,
         username: item.username,
