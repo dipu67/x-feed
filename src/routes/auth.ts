@@ -67,25 +67,49 @@ authRouter.post("/accept-invite", async (req, res) => {
     res.status(410).json({ error: "Invite expired or already used" });
     return;
   }
-  if (invite.email) {
-    const existingEmail = await prisma.user.findUnique({
-      where: { email: invite.email },
-    });
-    if (existingEmail) {
-      res.status(409).json({ error: "Email already registered" });
-      return;
-    }
-  }
-  const user = await prisma.user.create({
-    data: {
-      email: invite.email ?? `user-${invite.id}@invited.local`,
-      passwordHash: await hashPassword(password),
-      displayName: typeof displayName === "string" ? displayName : null,
-    },
+  // Atomic claim: only one concurrent caller can set acceptedAt. Whoever
+  // wins count=1 proceeds to create the user; the loser sees count=0 and
+  // gets a clean 410. Run as updateMany so the predicate is enforced at
+  // the SQL level (a plain .update would race two concurrent callers
+  // through the invite-update phase, leaking an orphan user).
+  const claim = await prisma.userInvite.updateMany({
+    where: { id: invite.id, acceptedAt: null, expiresAt: { gt: new Date() } },
+    data: { acceptedAt: new Date() },
   });
+  if (claim.count === 0) {
+    res.status(410).json({ error: "Invite expired or already used" });
+    return;
+  }
+  let user: { id: string; email: string; displayName: string | null };
+  try {
+    user = await prisma.user.create({
+      data: {
+        email: invite.email ?? `user-${invite.id}@invited.local`,
+        passwordHash: await hashPassword(password),
+        displayName: typeof displayName === "string" ? displayName : null,
+      },
+    });
+  } catch (err) {
+    // User creation failed after we claimed the invite — release the claim so
+    // the invite isn't permanently marked used for a user that doesn't exist.
+    await prisma.userInvite
+      .update({
+        where: { id: invite.id },
+        data: { acceptedAt: null, acceptedById: null },
+      })
+      .catch(() => undefined);
+    if (err && typeof err === "object" && "code" in err && (err as { code: string }).code === "P2002") {
+      const target = (err as { meta?: { target?: string[] } }).meta?.target;
+      if (Array.isArray(target) && target.includes("email")) {
+        res.status(409).json({ error: "Email already registered" });
+        return;
+      }
+    }
+    throw err;
+  }
   await prisma.userInvite.update({
     where: { id: invite.id },
-    data: { acceptedById: user.id, acceptedAt: new Date() },
+    data: { acceptedById: user.id },
   });
   const { token: sessionToken, expiresAt } = await createSession(user.id);
   res.cookie(SESSION_COOKIE, sessionToken, {

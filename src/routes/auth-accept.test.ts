@@ -65,4 +65,29 @@ describe("POST /auth/accept-invite", () => {
       .send({ token: inviteToken, password: "Abcdef1!Abcdef1!" })
       .expect(410);
   });
+
+  it("two concurrent accepts of the same token produce exactly one user", async () => {
+    // The race: without an atomic transaction, both requests can read
+    // acceptedAt=null, both create users, then race the invite update. We
+    // expect exactly one 200 + one 410, and exactly one new user row tied to
+    // the invite.
+    const t = randomToken();
+    const admin = await prisma.user.findFirst({ where: { email: { startsWith: "accept-admin-" } } });
+    const invite = await prisma.userInvite.create({
+      data: {
+        tokenHash: sha256Hex(t),
+        invitedById: admin!.id,
+        expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+      },
+    });
+    const [r1, r2] = await Promise.all([
+      request(app).post("/auth/accept-invite").send({ token: t, password: "Abcdef1!Abcdef1!" }),
+      request(app).post("/auth/accept-invite").send({ token: t, password: "Abcdef1!Abcdef1!" }),
+    ]);
+    const statuses = [r1.status, r2.status].sort();
+    expect(statuses).toEqual([200, 410]);
+    // Exactly one user should be linked to this invite
+    const linked = await prisma.userInvite.count({ where: { id: invite.id, acceptedById: { not: null } } });
+    expect(linked).toBe(1);
+  });
 });
