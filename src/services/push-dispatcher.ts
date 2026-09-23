@@ -14,8 +14,13 @@ export class PushDispatcher {
 
   private ensureVapid(): void {
     const subject = process.env.VAPID_SUBJECT;
-    const publicKey = process.env.VAPID_PUBLIC_KEY;
-    const privateKey = process.env.VAPID_PRIVATE_KEY;
+    const newPublic = process.env.VAPID_PUBLIC_KEY_NEW;
+    const newPrivate = process.env.VAPID_PRIVATE_KEY_NEW;
+    // When _NEW keys are present, prefer them. web-push keeps a single
+    // global VAPID detail, so an operator must restart the server to fully
+    // rotate — keep both sets documented in .env.example.
+    const publicKey = newPublic ?? process.env.VAPID_PUBLIC_KEY;
+    const privateKey = newPrivate ?? process.env.VAPID_PRIVATE_KEY;
     if (subject && publicKey && privateKey) {
       webpush.setVapidDetails(subject, publicKey, privateKey);
     }
