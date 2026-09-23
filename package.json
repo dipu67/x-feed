@@ -12,7 +12,8 @@
     "start:webui": "npm run start --prefix webui",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "keywords": [],
   "author": "",
@@ -23,9 +24,11 @@
     "@types/node": "^26.5.0",
     "@types/pg": "^8.23.1",
     "@types/web-push": "^3.6.4",
+    "@vitest/coverage-v8": "^5.0.1",
     "prisma": "^7.10.0",
     "tsx": "^4.23.13",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
