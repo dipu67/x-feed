@@ -123,6 +123,17 @@ export async function logout(): Promise<void> {
   await request<void>("/auth/logout", { method: "POST" });
 }
 
+export async function acceptInvite(
+  token: string,
+  password: string,
+  displayName?: string,
+): Promise<void> {
+  await request<void>("/auth/accept-invite", {
+    method: "POST",
+    body: JSON.stringify({ token, password, displayName }),
+  });
+}
+
 /**
  * Returns the logged-in user, or `null` if the session is anonymous. Other
  * server errors are thrown — callers that want a "logged-out" view should
