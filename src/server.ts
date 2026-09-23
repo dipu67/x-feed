@@ -13,6 +13,7 @@ import { pushRouter } from "./routes/push.js";
 import { webhooksRouter } from "./routes/webhooks.js";
 import { filtersRouter, mutesRouter } from "./routes/filters.js";
 import { adminXAuthRouter } from "./routes/admin-xauth.js";
+import { postRouter } from "./routes/post.js";
 
 export function createApp() {
   const app = express();
@@ -52,6 +53,7 @@ export function createApp() {
   app.use("/push", pushRouter);
   app.use("/filters", filtersRouter);
   app.use("/mute-keywords", mutesRouter);
+  app.use("/post", postRouter);
 
   return app;
 }
