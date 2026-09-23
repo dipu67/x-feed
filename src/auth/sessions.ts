@@ -54,7 +54,14 @@ export async function refreshIfNeeded(
 ): Promise<{ token?: string; expiresAt: Date }> {
   const ms = session.expiresAt.getTime() - Date.now();
   if (ms > REFRESH_WINDOW_MS) return { expiresAt: session.expiresAt };
-  const newExpiry = new Date(Date.now() + SESSION_TTL_MS);
+  // Round to the nearest minute so concurrent refreshIfNeeded calls within
+  // the same minute produce the same expiresAt. Without this, parallel
+  // callers compute slightly different `new Date(Date.now() + TTL)` values
+  // and write distinct rows.
+  const minuteMs = 60_000;
+  const newExpiry = new Date(
+    Math.ceil((Date.now() + SESSION_TTL_MS) / minuteMs) * minuteMs,
+  );
   await prisma.userSession.update({
     where: { id: session.id },
     data: { expiresAt: newExpiry },
