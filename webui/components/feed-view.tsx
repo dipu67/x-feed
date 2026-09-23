@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { io } from "socket.io-client";
 import { Bell, BellOff, Rss } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -22,7 +21,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { FeedItemCard } from "@/components/feed-item-card";
 import { useTweetNotifications } from "@/hooks/use-tweet-notifications";
 import { useUser } from "@/hooks/useUser";
-import { SOCKET_URL, fetchFeed } from "@/lib/api";
+import { fetchFeed } from "@/lib/api";
+import { getSocket } from "@/lib/socket";
 import type { FeedItem } from "@/lib/types";
 
 export function FeedView() {
@@ -38,7 +38,7 @@ export function FeedView() {
   // resubscribing whenever the toggle or the item list changes.
   const notifyRef = useRef(notifications.notify);
   const seenRef = useRef<Set<string>>(new Set());
-  const socketRef = useRef<ReturnType<typeof io> | null>(null);
+  const socketRef = useRef<ReturnType<typeof getSocket> | null>(null);
 
   useEffect(() => {
     notifyRef.current = notifications.notify;
@@ -76,15 +76,7 @@ export function FeedView() {
   }, []);
 
   useEffect(() => {
-    const socket = io(SOCKET_URL, {
-      transports: ["websocket", "polling"],
-      reconnection: true,
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 30000,
-      // Android Chrome may drop idle WebSockets after ~30 s in background.
-      // Use polling as a fallback and keep pinging every 25 s.
-    });
+    const socket = getSocket();
     socketRef.current = socket;
 
     socket.on("connect", () => {
