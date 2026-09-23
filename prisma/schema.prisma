@@ -130,9 +130,12 @@ model PushSubscription {
   auth           String
   expirationTime DateTime? @map("expiration_time") @db.Timestamptz
   userAgent      String?   @map("user_agent")
+  userId         String?   @map("user_id")
+  user           User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
+  @@index([userId])
   @@map("push_subscriptions")
 }
 
@@ -171,6 +174,7 @@ model User {
   follows     UserFollow[]
   filters     Filter[]
   mutes       MuteKeyword[]
+  pushSubs    PushSubscription[]
 
   @@map("users")
 }
