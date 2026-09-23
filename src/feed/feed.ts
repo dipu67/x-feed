@@ -6,12 +6,24 @@ import { chunk } from "../lib/chunk.js";
 import { sleep } from "../lib/sleep.js";
 import { sendTweetPushNotification } from "../services/push.js";
 import { getTwitterClient } from "../twitter/getClient.js";
+import { CircuitBreaker } from "../twitter/circuit-breaker.js";
+import { withCircuitBreaker } from "./circuit-wrapped-call.js";
 import {
   applyUserAbsence,
   applyUserPresence,
   type ProjectSnapshotInput,
 } from "../services/tracking.js";
 import type { UserData } from "../TwitterClient/types.js";
+
+const readBreakers = new Map<string, CircuitBreaker>();
+function readBreakerFor(accountId: string): CircuitBreaker {
+  let b = readBreakers.get(accountId);
+  if (!b) {
+    b = new CircuitBreaker({ failureThreshold: 3, cooldownMs: 15 * 60 * 1000 });
+    readBreakers.set(accountId, b);
+  }
+  return b;
+}
 
 const BATCH_SIZE = 100;
 const CYCLE_MS =  60 * 1000; // every 60s
@@ -160,7 +172,8 @@ async function runCycle(io: FeedSocket): Promise<void> {
   }
 
   const byUserId = new Map(projects.map((project) => [project.userId, project]));
-  const client = await getTwitterClient();
+  const { client, accountId } = await getTwitterClient();
+  const readBreaker = readBreakerFor(accountId);
   const batches = chunk(
     projects.map((project) => project.userId),
     BATCH_SIZE,
@@ -175,7 +188,16 @@ async function runCycle(io: FeedSocket): Promise<void> {
   const presentIds = new Set<string>();
 
   for (const userIds of batches) {
-    const result = await client.getUsersByIds(userIds);
+    const call = await withCircuitBreaker(readBreaker, () =>
+      client.getUsersByIds(userIds),
+    );
+    if ("skipped" in call) {
+      console.warn(
+        `[feed] read breaker open for account=${accountId}; skipping ${userIds.length} ids`,
+      );
+      continue;
+    }
+    const result = call;
     if (!result.success || !result.users) {
       // A hard API failure (rate limit, network) is NOT a suspension signal —
       // the whole batch is missing, so don't run the absence pass.
@@ -249,10 +271,10 @@ async function runCycle(io: FeedSocket): Promise<void> {
       if (presentIds.has(missingId)) continue;
       const project = byUserId.get(missingId);
       if (!project) continue;
-      const result = await applyUserAbsence(toTrackingInput(project));
-      if (result.statusChanged) {
+      const absence = await applyUserAbsence(toTrackingInput(project));
+      if (absence.statusChanged) {
         console.log(
-          `[feed] @${project.username} marked suspended (${result.missedChecks} consecutive misses)`,
+          `[feed] @${project.username} marked suspended (${absence.missedChecks} consecutive misses)`,
         );
       }
     }
