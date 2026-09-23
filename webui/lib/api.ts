@@ -104,6 +104,64 @@ export function sendWebhookProject(input: ProjectInput, secret?: string) {
   });
 }
 
+// ── Filters / mutes ──────────────────────────────────────────────────────
+
+export type Filter = {
+  id: string;
+  name: string;
+  kind: "project" | "keyword";
+  projectId?: string | null;
+  pattern?: string | null;
+  action: "keep" | "hide";
+  isActive: boolean;
+};
+
+export type Mute = {
+  id: string;
+  pattern: string;
+  isRegex: boolean;
+};
+
+export async function fetchFilters(): Promise<Filter[]> {
+  return request<Filter[]>("/filters");
+}
+
+export type FilterInput = {
+  name: string;
+  kind: "project" | "keyword";
+  action: "keep" | "hide";
+  pattern?: string;
+  projectId?: string;
+};
+
+export async function createFilter(input: FilterInput): Promise<Filter> {
+  return request<Filter>("/filters", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteFilter(id: string): Promise<void> {
+  await request<void>(`/filters/${id}`, { method: "DELETE" });
+}
+
+export async function fetchMutes(): Promise<Mute[]> {
+  return request<Mute[]>("/mute-keywords");
+}
+
+export type MuteInput = { pattern: string; isRegex?: boolean };
+
+export async function createMute(input: MuteInput): Promise<Mute> {
+  return request<Mute>("/mute-keywords", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteMute(id: string): Promise<void> {
+  await request<void>(`/mute-keywords/${id}`, { method: "DELETE" });
+}
+
 // ── Auth ──────────────────────────────────────────────────────────────────
 
 export type AuthUser = {
