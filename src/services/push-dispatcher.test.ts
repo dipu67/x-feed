@@ -127,4 +127,59 @@ describe("PushDispatcher.dispatchToFollowers (Review Focus #4)", () => {
     await prisma.userFollow.deleteMany({ where: { userId: { in: extras.map((u) => u.id) } } });
     await prisma.user.deleteMany({ where: { id: { in: extras.map((u) => u.id) } } });
   });
+
+  it("caps concurrent web-push calls per dispatch to the configured cap", async () => {
+    // The concurrency field is the operator-tunable backpressure cap for
+    // the inner sub-fan-out (web-push delivery per subscriber). If we never
+    // apply it, the worst case is unbounded Promise.all across a hot user
+    // with thousands of subs — web-push library's socket pool will happily
+    // try every connection at once and choke the host.
+    sendNotification.mockReset();
+    const N = 60;
+    const CAP = 8;
+
+    const inserted = await Promise.all(
+      Array.from({ length: N }, (_, i) =>
+        prisma.pushSubscription.create({
+          data: {
+            endpoint: `https://push.test/cap-${i}-${Date.now()}-${Math.random()}`,
+            p256dh: "k",
+            auth: "k",
+            userId,
+          },
+        }),
+      ),
+    );
+
+    // Track max in-flight via instrumentation on the mock.
+    let inFlight = 0;
+    let maxInFlight = 0;
+    sendNotification.mockImplementation(async () => {
+      inFlight++;
+      if (inFlight > maxInFlight) maxInFlight = inFlight;
+      try {
+        await new Promise((r) => setTimeout(r, 25));
+        return {};
+      } finally {
+        inFlight--;
+      }
+    });
+
+    const d = new PushDispatcher({ concurrency: CAP });
+    await d.dispatchToUser(userId, {
+      id: "cap",
+      projectId,
+      username: "u",
+      text: "hi",
+      tweetUrl: "u",
+      postedAt: new Date(),
+      likes: 0,
+      reposts: 0,
+      replies: 0,
+    });
+
+    expect(maxInFlight).toBeLessThanOrEqual(CAP);
+    expect(sendNotification.mock.calls.length).toBe(N);
+    await prisma.pushSubscription.deleteMany({ where: { id: { in: inserted.map((s) => s.id) } } });
+  });
 });

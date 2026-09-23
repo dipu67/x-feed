@@ -71,9 +71,26 @@ export class PushDispatcher {
       url: item.tweetUrl,
       tag: `${item.projectId}:${item.id}`,
     });
-    await Promise.all(
-      subs.map((s) => this.sendOne(s.endpoint, s.p256dh, s.auth, payload)),
-    );
+    await this.runPool(subs.map((s) => () => this.sendOne(s.endpoint, s.p256dh, s.auth, payload)));
+  }
+
+  /**
+   * Run a list of thunks with at most `this.concurrency` invocations in
+   * flight at any time. Without this, dispatching to a user with thousands
+   * of push subscriptions would fire every web-push call at once and
+   * saturate the host's outbound sockets.
+   */
+  private async runPool(jobs: Array<() => Promise<void>>): Promise<void> {
+    const cap = Math.max(1, this.concurrency);
+    let next = 0;
+    const workers = Array.from({ length: Math.min(cap, jobs.length) }, async () => {
+      while (true) {
+        const i = next++;
+        if (i >= jobs.length) return;
+        await jobs[i]!();
+      }
+    });
+    await Promise.all(workers);
   }
 
   private async sendOne(
