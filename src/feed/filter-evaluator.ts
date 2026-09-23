@@ -35,6 +35,20 @@ export function shouldShow(
   filters: FilterRule[],
   mutes: MuteRule[],
 ): boolean {
+  // A matching `keep` rule overrides every other decision below: hides,
+  // mutes, and the follow restriction. The whole point of `keep` is "force
+  // this through" — apply it first and short-circuit.
+  for (const f of filters) {
+    if (!f.isActive || f.action !== "keep") continue;
+    if (f.kind === "project" && f.projectId === item.projectId) return true;
+    if (f.kind === "keyword" && f.pattern) {
+      try {
+        if (new RegExp(f.pattern, "i").test(item.text)) return true;
+      } catch {
+        // ignore invalid regex
+      }
+    }
+  }
   if (follows.size > 0 && !follows.has(item.projectId)) return false;
   for (const f of filters) {
     if (!f.isActive || f.action !== "hide") continue;

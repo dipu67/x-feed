@@ -51,4 +51,29 @@ describe("shouldShow", () => {
       ], [{ pattern: "spam", isRegex: false }]),
     ).toBe(false);
   });
+
+  it("keep filter overrides a hide filter that also matches", () => {
+    expect(
+      shouldShow(item("p1", "hi"), new Set(["p1"]), [
+        { kind: "project", projectId: "p1", action: "hide", isActive: true },
+        { kind: "keyword", pattern: "hi", action: "keep", isActive: true },
+      ], []),
+    ).toBe(true);
+  });
+
+  it("keep filter overrides a mute that also matches", () => {
+    expect(
+      shouldShow(item("p1", "spam hello"), new Set(), [
+        { kind: "keyword", pattern: "spam", action: "keep", isActive: true },
+      ], [{ pattern: "spam", isRegex: false }]),
+    ).toBe(true);
+  });
+
+  it("keep filter overrides the follow restriction for an unfollowed project", () => {
+    expect(
+      shouldShow(item("p1", "hi"), new Set(["p2"]), [
+        { kind: "project", projectId: "p1", action: "keep", isActive: true },
+      ], []),
+    ).toBe(true);
+  });
 });
