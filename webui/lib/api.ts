@@ -62,8 +62,12 @@ export function deleteProject(userId: string) {
   });
 }
 
-export async function fetchFeed(limit = 80) {
-  const data = await request<{ items?: FeedItem[] }>(`/feed?limit=${limit}`);
+export async function fetchFeed(limit = 80, filter?: "mine") {
+  const q = new URLSearchParams({ limit: String(limit) });
+  if (filter) q.set("filter", filter);
+  const data = await request<{ items?: FeedItem[] }>(
+    `/feed?${q.toString()}`,
+  );
   return { items: Array.isArray(data.items) ? data.items : [] };
 }
 

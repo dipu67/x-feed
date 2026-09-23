@@ -21,6 +21,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { FeedItemCard } from "@/components/feed-item-card";
 import { useTweetNotifications } from "@/hooks/use-tweet-notifications";
+import { useUser } from "@/hooks/useUser";
 import { SOCKET_URL, fetchFeed } from "@/lib/api";
 import type { FeedItem } from "@/lib/types";
 
@@ -32,6 +33,7 @@ export function FeedView() {
   const [error, setError] = useState<string | null>(null);
 
   const notifications = useTweetNotifications();
+  const { user } = useUser();
   // Kept in refs so the socket effect can stay mounted once, without
   // resubscribing whenever the toggle or the item list changes.
   const notifyRef = useRef(notifications.notify);
@@ -44,7 +46,10 @@ export function FeedView() {
 
   useEffect(() => {
     let cancelled = false;
-    fetchFeed()
+    // Logged-in users get their personalized feed (follows + filters + mutes);
+    // anonymous viewers see the full public feed.
+    const filter = user ? "mine" : undefined;
+    fetchFeed(80, filter)
       .then((data) => {
         if (cancelled) return;
         const rows = data.items ?? [];
