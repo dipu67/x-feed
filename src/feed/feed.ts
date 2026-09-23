@@ -13,6 +13,7 @@ import {
   applyUserPresence,
   type ProjectSnapshotInput,
 } from "../services/tracking.js";
+import { decidePoll } from "../TwitterClient/poll-scheduler.js";
 import type { UserData } from "../TwitterClient/types.js";
 
 const readBreakers = new Map<string, CircuitBreaker>();
@@ -174,13 +175,41 @@ async function runCycle(io: FeedSocket): Promise<void> {
   const byUserId = new Map(projects.map((project) => [project.userId, project]));
   const { client, accountId } = await getTwitterClient();
   const readBreaker = readBreakerFor(accountId);
-  const batches = chunk(
-    projects.map((project) => project.userId),
-    BATCH_SIZE,
+
+  // Build a lastTweetAt lookup so the polling-decision check can skip
+  // accounts that haven't tweeted in 7+ days (1/4 polling frequency).
+  const latestItems = await prisma.feedItem.findMany({
+    where: { projectId: { in: projects.map((p) => p.userId) } },
+    orderBy: { postedAt: "desc" },
+    select: { projectId: true, postedAt: true },
+    distinct: ["projectId"],
+  });
+  const lastTweetAtByProjectId = new Map(
+    latestItems.map((item) => [item.projectId, item.postedAt]),
   );
 
+  // Apply the poll-scheduler: filter out inactive projects from the batch list.
+  const skippedInactive: string[] = [];
+  const pollableUserIds: string[] = [];
+  for (const project of projects) {
+    const lastTweetAt = lastTweetAtByProjectId.get(project.userId) ?? null;
+    const decision = decidePoll({ lastTweetAt });
+    if (decision.pollNow) {
+      pollableUserIds.push(project.userId);
+    } else {
+      skippedInactive.push(project.userId);
+    }
+  }
+  if (skippedInactive.length > 0) {
+    console.log(
+      `[feed] skipping ${skippedInactive.length} inactive project(s) (no tweets in 7d)`,
+    );
+  }
+
+  const batches = chunk(pollableUserIds, BATCH_SIZE);
+
   console.log(
-    `[feed] polling ${projects.length} projects in ${batches.length} batch(es)`,
+    `[feed] polling ${pollableUserIds.length}/${projects.length} projects in ${batches.length} batch(es)`,
   );
 
   // Track which projects were returned by X this cycle so the absence pass
