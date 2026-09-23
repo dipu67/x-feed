@@ -104,6 +104,18 @@ describe("handleLinkCommand", () => {
     await prisma.userInvite.deleteMany({ where: { invitedById: secondInviter.id } });
     await prisma.user.delete({ where: { id: secondInviter.id } });
   });
+
+  it("marks the invite as accepted when the link succeeds", async () => {
+    const before = await prisma.userInvite.findFirst({
+      where: { invitedById: inviterId, acceptedAt: null },
+    });
+    expect(before).not.toBeNull();
+    await handleLinkCommand(chatId, inviteToken);
+    const after = await prisma.userInvite.findUniqueOrThrow({
+      where: { id: before!.id },
+    });
+    expect(after.acceptedAt).toBeInstanceOf(Date);
+  });
 });
 
 describe("handleWhoamiCommand", () => {

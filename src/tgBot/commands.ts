@@ -30,6 +30,19 @@ export async function handleLinkCommand(
     create: { chatId: BigInt(chatId), userId: invite.invitedById },
     update: { userId: invite.invitedById },
   });
+  // Mark the invite accepted — invites are single-use and shared with
+  // /accept-invite on the web. Use updateMany + acceptedAt-null guard so
+  // two chats racing the same token can't both bind (loser sees count=0
+  // and we revert the binding we just created above).
+  const claim = await prisma.userInvite.updateMany({
+    where: { id: invite.id, acceptedAt: null },
+    data: { acceptedAt: new Date() },
+  });
+  if (claim.count === 0) {
+    await prisma.telegramBinding.delete({ where: { chatId: BigInt(chatId) } })
+      .catch(() => undefined);
+    return { ok: false, reason: "invalid" };
+  }
   return { ok: true };
 }
 
