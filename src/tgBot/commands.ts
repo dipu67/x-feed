@@ -1,5 +1,6 @@
 import { prisma } from "../db/prisma.js";
 import { sha256Hex } from "../auth/tokens.js";
+import { shouldShow } from "../feed/filter-evaluator.js";
 
 export type LinkResult = { ok: true } | { ok: false; reason: "invalid" };
 export type WhoamiResult =
@@ -139,4 +140,68 @@ export async function handleUnmuteCommand(
     where: { userId: binding.userId, pattern },
   });
   return { ok: true };
+}
+
+export type FeedItem = { username: string; text: string; url: string };
+
+export type FeedResult =
+  | { ok: true; items: FeedItem[] }
+  | { ok: false; reason: "not_linked" };
+
+/**
+ * Return the most recent feed items visible to the bound user after applying
+ * their follows + filters + mutes. Capped at `n` items, but reads up to 200
+ * from the DB so the cap is applied to the post-filter list, not raw rows.
+ */
+export async function handleFeedCommand(
+  chatId: number,
+  n: number,
+): Promise<FeedResult> {
+  const binding = await requireBinding(chatId);
+  if (!binding.ok) return { ok: false, reason: "not_linked" };
+  const [follows, filters, mutes] = await Promise.all([
+    prisma.userFollow.findMany({ where: { userId: binding.userId } }),
+    prisma.filter.findMany({
+      where: { userId: binding.userId, isActive: true },
+    }),
+    prisma.muteKeyword.findMany({ where: { userId: binding.userId } }),
+  ]);
+  const followSet = new Set(follows.map((f) => f.projectId));
+  const items = await prisma.feedItem.findMany({
+    orderBy: { postedAt: "desc" },
+    take: 200,
+  });
+  const filtered = items.filter((i) =>
+    shouldShow(
+      { projectId: i.projectId, text: i.text },
+      followSet,
+      filters,
+      mutes,
+    ),
+  );
+  return {
+    ok: true,
+    items: filtered
+      .slice(0, n)
+      .map((i) => ({ username: i.username, text: i.text, url: i.tweetUrl })),
+  };
+}
+
+export type FiltersResult =
+  | { ok: true; filters: unknown[] }
+  | { ok: false; reason: "not_linked" };
+
+/**
+ * Return every filter (active and inactive) on the bound user. The bot can
+ * render the names + states directly; deeper rendering lives in the UI.
+ */
+export async function handleFiltersCommand(
+  chatId: number,
+): Promise<FiltersResult> {
+  const binding = await requireBinding(chatId);
+  if (!binding.ok) return { ok: false, reason: "not_linked" };
+  const filters = await prisma.filter.findMany({
+    where: { userId: binding.userId },
+  });
+  return { ok: true, filters };
 }

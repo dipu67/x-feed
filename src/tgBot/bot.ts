@@ -6,6 +6,8 @@ import {
   handleUnfollowCommand,
   handleMuteCommand,
   handleUnmuteCommand,
+  handleFeedCommand,
+  handleFiltersCommand,
 } from "./commands.js";
 
 const token = process.env.TELEGRAM_BOT_TOKEN ?? "";
@@ -132,6 +134,69 @@ bot.command("unmute", async (ctx) => {
 });
 
 function replyFor(reason: string): string {
+  switch (reason) {
+    case "not_linked":
+      return "Not linked. Use /link <token> first.";
+    case "no_project":
+      return "Project not found.";
+    case "invalid_regex":
+      return "Invalid regex.";
+    default:
+      return `Failed: ${reason}`;
+  }
+}
+bot.command("feed", async (ctx) => {
+  const chatId = ctx.chat?.id;
+  if (typeof chatId !== "number") {
+    await ctx.reply("This command only works in chats.");
+    return;
+  }
+  const parts = ctx.message?.text?.split(/\s+/) ?? [];
+  const n = Number.parseInt(parts[1] ?? "10", 10);
+  if (!Number.isFinite(n) || n < 1) {
+    await ctx.reply("Usage: /feed [n]");
+    return;
+  }
+  const result = await handleFeedCommand(chatId, n);
+  if (!result.ok) {
+    await ctx.reply(replyFor(result.reason));
+    return;
+  }
+  if (result.items.length === 0) {
+    await ctx.reply("No items.");
+    return;
+  }
+  for (const item of result.items) {
+    await ctx.reply(`@${item.username}: ${item.text}\n${item.url}`);
+  }
+});
+
+bot.command("filters", async (ctx) => {
+  const chatId = ctx.chat?.id;
+  if (typeof chatId !== "number") {
+    await ctx.reply("This command only works in chats.");
+    return;
+  }
+  const result = await handleFiltersCommand(chatId);
+  if (!result.ok) {
+    await ctx.reply(replyFor(result.reason));
+    return;
+  }
+  const filters = result.filters as Array<{
+    name: string;
+    kind: string;
+    action: string;
+    isActive: boolean;
+  }>;
+  if (filters.length === 0) {
+    await ctx.reply("No filters.");
+    return;
+  }
+  for (const f of filters) {
+    const state = f.isActive ? "on" : "off";
+    await ctx.reply(`${f.name} [${state}] — ${f.kind}/${f.action}`);
+  }
+});
   switch (reason) {
     case "not_linked":
       return "Not linked. Use /link <token> first.";
