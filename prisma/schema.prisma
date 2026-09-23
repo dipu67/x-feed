@@ -249,3 +249,12 @@ model MuteKeyword {
   @@index([userId])
   @@map("mute_keywords")
 }
+
+model TelegramBinding {
+  chatId    BigInt   @id @map("chat_id")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([userId])
+  @@map("telegram_bindings")
+}
