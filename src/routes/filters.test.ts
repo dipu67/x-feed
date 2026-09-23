@@ -54,4 +54,39 @@ describe("filters routes", () => {
       .send({ pattern: "spam" })
       .expect(201);
   });
+
+  it("rejects PATCH /filters/:id that tries to rewrite userId", async () => {
+    const other = await prisma.user.create({
+      data: {
+        email: `filters-other-${Date.now()}@t.local`,
+        passwordHash: await hashPassword("passwordpassword1"),
+      },
+    });
+    const created = await prisma.filter.create({
+      data: {
+        userId,
+        name: "Mine",
+        kind: "keyword",
+        pattern: "x",
+        action: "hide",
+      },
+    });
+    await request(app)
+      .patch(`/filters/${created.id}`)
+      .set("Cookie", sessionCookie)
+      .send({ userId: other.id })
+      .expect(200);
+    const after = await prisma.filter.findUniqueOrThrow({ where: { id: created.id } });
+    expect(after.userId).toBe(userId);
+    await prisma.filter.delete({ where: { id: created.id } });
+    await prisma.user.delete({ where: { id: other.id } });
+  });
+
+  it("rejects POST /filters with kind=project but no projectId", async () => {
+    await request(app)
+      .post("/filters")
+      .set("Cookie", sessionCookie)
+      .send({ name: "Bad", kind: "project", action: "hide" })
+      .expect(400);
+  });
 });
