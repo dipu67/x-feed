@@ -94,7 +94,9 @@ export class XWriteClient {
         };
       }
       if (res.status === 401 || res.status === 403) {
-        this.breaker.recordFailure(new Error(String(res.status)));
+        // Auth failures are a token problem, not a service-rate problem —
+        // don't pollute the breaker counter; the operator will re-link the
+        // account and writes should resume immediately on the new token.
         return { ok: false, error: "auth_invalid", message: `auth failed: ${res.status}` };
       }
       this.breaker.recordFailure(new Error(String(res.status)));

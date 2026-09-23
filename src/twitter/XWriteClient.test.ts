@@ -28,6 +28,23 @@ describe("XWriteClient", () => {
     if (!res.ok) expect(res.error).toBe("auth_invalid");
   });
 
+  it("does not count 401/403 toward the breaker threshold", async () => {
+    // Auth failures are a token problem, not a service-rate problem — they
+    // shouldn't pollute the breaker state. After N auth errors the breaker
+    // must still be closed (operator will re-link the account, then writes
+    // can resume immediately).
+    const fakeFetch = vi.fn().mockResolvedValue({ status: 401, json: async () => ({}) });
+    const client = new XWriteClient(
+      { authToken: "x", ct0: "y", username: "u" },
+      { fetcher: fakeFetch },
+    );
+    for (let i = 0; i < 10; i++) {
+      const res = await client.post(`try-${i}`);
+      expect(res.ok).toBe(false);
+    }
+    expect(client.getCircuitState()).toBe("closed");
+  });
+
   it("returns ok=true on a 200 with a tweet id", async () => {
     const fakeFetch = vi.fn().mockResolvedValue({
       status: 200,
