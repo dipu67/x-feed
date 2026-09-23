@@ -13,6 +13,7 @@ import { pushRouter } from "./routes/push.js";
 import { webhooksRouter } from "./routes/webhooks.js";
 import { filtersRouter, mutesRouter } from "./routes/filters.js";
 import { adminXAuthRouter } from "./routes/admin-xauth.js";
+import { adminHealthRouter } from "./routes/admin-health.js";
 import { postRouter } from "./routes/post.js";
 
 export function createApp() {
@@ -47,6 +48,7 @@ export function createApp() {
   app.use("/auth", authRouter);
   app.use("/admin", adminInvitesRouter);
   app.use("/admin", adminXAuthRouter);
+  app.use("/admin/health", adminHealthRouter);
   app.use("/webhooks", webhooksRouter);
   app.use("/feed", feedRouter);
   app.use("/growth", growthRouter);
