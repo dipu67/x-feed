@@ -11,6 +11,7 @@ import { growthRouter } from "./routes/growth.js";
 import { projectsRouter } from "./routes/projects.js";
 import { pushRouter } from "./routes/push.js";
 import { webhooksRouter } from "./routes/webhooks.js";
+import { filtersRouter, mutesRouter } from "./routes/filters.js";
 
 export function createApp() {
   const app = express();
@@ -47,6 +48,8 @@ export function createApp() {
   app.use("/feed", feedRouter);
   app.use("/growth", growthRouter);
   app.use("/push", pushRouter);
+  app.use("/filters", filtersRouter);
+  app.use("/mute-keywords", mutesRouter);
 
   return app;
 }
