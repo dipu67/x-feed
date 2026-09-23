@@ -16,9 +16,11 @@ model xauthtoken {
   authToken String   @unique @map("auth_token")
   ct0       String
   isActive  Boolean  @default(true) @map("is_active")
+  userId    String?  @map("user_id")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
+  @@index([userId])
   @@map("x_auth_token")
 }
 
