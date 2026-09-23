@@ -104,6 +104,39 @@ export function sendWebhookProject(input: ProjectInput, secret?: string) {
   });
 }
 
+// ── Auth ──────────────────────────────────────────────────────────────────
+
+export type AuthUser = {
+  id: string;
+  email: string;
+  displayName: string | null;
+};
+
+export async function login(email: string, password: string): Promise<void> {
+  await request<void>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export async function logout(): Promise<void> {
+  await request<void>("/auth/logout", { method: "POST" });
+}
+
+/**
+ * Returns the logged-in user, or `null` if the session is anonymous. Other
+ * server errors are thrown — callers that want a "logged-out" view should
+ * treat any thrown error as anonymous after retrying once.
+ */
+export async function fetchMe(): Promise<AuthUser | null> {
+  const response = await fetch(`/api/auth/me`, { credentials: "include" });
+  if (response.status === 401) return null;
+  if (!response.ok) {
+    throw new Error(`Auth check failed (${response.status})`);
+  }
+  return (await response.json()) as AuthUser;
+}
+
 // ── Growth ────────────────────────────────────────────────────────────────
 
 export type GrowthChange = {
