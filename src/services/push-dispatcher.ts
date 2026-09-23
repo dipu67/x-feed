@@ -1,14 +1,20 @@
 import webpush from "web-push";
+import type { Server as SocketServer } from "socket.io";
 import { prisma } from "../db/prisma.js";
 import { shouldShow } from "../feed/filter-evaluator.js";
 import type { FeedItem } from "../generated/prisma/client.js";
 
-type DispatcherOpts = { concurrency?: number };
+type DispatcherOpts = {
+  concurrency?: number;
+  io?: SocketServer;
+};
 
 export class PushDispatcher {
   private readonly concurrency: number;
+  private readonly io?: SocketServer;
   constructor(opts: DispatcherOpts = {}) {
     this.concurrency = opts.concurrency ?? 16;
+    this.io = opts.io;
     this.ensureVapid();
   }
 
@@ -51,6 +57,13 @@ export class PushDispatcher {
     ) {
       return;
     }
+    // Live socket fan-out — only when the server is wired with an io
+    // instance. Web Push still runs below so offline devices get notified.
+    this.io?.to(`user:${userId}`).emit("feed:new", {
+      id: item.id,
+      text: item.text,
+      tweetUrl: item.tweetUrl,
+    });
     const subs = await prisma.pushSubscription.findMany({ where: { userId } });
     const payload = JSON.stringify({
       title: `@${item.username}`,

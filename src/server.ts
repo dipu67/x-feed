@@ -2,6 +2,7 @@ import express from "express";
 import { createServer } from "node:http";
 import { Server } from "socket.io";
 import cookieParser from "cookie-parser";
+import { resolveSession, SESSION_COOKIE } from "./auth/sessions.js";
 import { startFeedWorker } from "./feed/feed.js";
 import { adminInvitesRouter } from "./routes/admin-invites.js";
 import { authRouter } from "./routes/auth.js";
@@ -70,6 +71,15 @@ export function startServer(port = Number(process.env.PORT ?? 5500)) {
 
   io.on("connection", (socket) => {
     console.log(`[socket] connected ${socket.id}`);
+    // The browser sends its session cookie on the handshake; resolve it and
+    // join the per-user room so feed fan-out can target this socket.
+    const cookies = parseCookies(socket.handshake.headers.cookie);
+    const token = cookies[SESSION_COOKIE];
+    if (token) {
+      resolveSession(token).then((r) => {
+        if (r) socket.join(`user:${r.user.id}`);
+      });
+    }
     socket.on("disconnect", () => {
       console.log(`[socket] disconnected ${socket.id}`);
     });
@@ -82,4 +92,18 @@ export function startServer(port = Number(process.env.PORT ?? 5500)) {
   });
 
   return { app, httpServer, io };
+}
+/** Tiny cookie parser used by the socket auth path — keeps the module out of
+ * the express stack so it doesn't run on every HTTP request. */
+function parseCookies(header: string | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!header) return out;
+  for (const part of header.split(";")) {
+    const idx = part.indexOf("=");
+    if (idx < 0) continue;
+    const k = part.slice(0, idx).trim();
+    const v = part.slice(idx + 1).trim();
+    if (k) out[k] = decodeURIComponent(v);
+  }
+  return out;
 }

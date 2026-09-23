@@ -26,7 +26,11 @@ function readBreakerFor(accountId: string): CircuitBreaker {
   return b;
 }
 
-const pushDispatcher = new PushDispatcher();
+let pushDispatcher: PushDispatcher | null = null;
+function getDispatcher(io: FeedSocket): PushDispatcher {
+  if (!pushDispatcher) pushDispatcher = new PushDispatcher({ io });
+  return pushDispatcher;
+}
 
 const BATCH_SIZE = 100;
 const CYCLE_MS =  60 * 1000; // every 60s
@@ -127,7 +131,7 @@ async function persistAndEmit(
       },
     };
     io.emit("feed:new", feedEvent);
-    void pushDispatcher.dispatchToFollowers(item);
+    void getDispatcher(io).dispatchToFollowers(item);
   }
   return created;
 }
