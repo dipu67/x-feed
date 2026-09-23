@@ -32,18 +32,22 @@ self.addEventListener("activate", (e) => {
 
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
+  // The Next.js rewrite prefix from next.config.ts maps `/api/*` onto the
+  // backend, so requests inside the SW always start with `/api/`. Strip the
+  // prefix when matching the cached-path predicates below.
+  const apiPath = url.pathname.replace(/^\/api/, "");
   // Stale-while-revalidate keeps the home page snappy when offline and bounds
   // the feed cache to the most recent 50 responses.
-  if (url.pathname === "/feed" || url.pathname.startsWith("/feed?")) {
+  if (apiPath === "/feed" || apiPath.startsWith("/feed?")) {
     e.respondWith(staleWhileRevalidate(e.request, FEED_CACHE, 50));
     return;
   }
   // Network-first for auth state and per-user filters so a freshly-logged-in
   // browser doesn't see stale "anonymous" data when the network is up.
   if (
-    url.pathname === "/auth/me" ||
-    url.pathname.startsWith("/filters") ||
-    url.pathname.startsWith("/mute-keywords")
+    apiPath === "/auth/me" ||
+    apiPath.startsWith("/filters") ||
+    apiPath.startsWith("/mute-keywords")
   ) {
     e.respondWith(networkFirst(e.request, SHELL_CACHE));
     return;
