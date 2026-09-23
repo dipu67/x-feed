@@ -3,6 +3,7 @@ import { createServer } from "node:http";
 import { Server } from "socket.io";
 import cookieParser from "cookie-parser";
 import { startFeedWorker } from "./feed/feed.js";
+import { authRouter } from "./routes/auth.js";
 import { authTokensRouter } from "./routes/auth-tokens.js";
 import { feedRouter } from "./routes/feed.js";
 import { growthRouter } from "./routes/growth.js";
@@ -39,6 +40,7 @@ export function createApp() {
 
   app.use("/projects", projectsRouter);
   app.use("/auth-tokens", authTokensRouter);
+  app.use("/auth", authRouter);
   app.use("/webhooks", webhooksRouter);
   app.use("/feed", feedRouter);
   app.use("/growth", growthRouter);
