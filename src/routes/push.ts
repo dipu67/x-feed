@@ -4,6 +4,7 @@ import {
   savePushSubscription,
   type PushSubscriptionInput,
 } from "../services/push.js";
+import { requireUser } from "../auth/middleware.js";
 
 export const pushRouter = Router();
 
@@ -41,7 +42,7 @@ function readSubscription(body: unknown): PushSubscriptionInput | null {
   };
 }
 
-pushRouter.post("/subscriptions", async (req, res) => {
+pushRouter.post("/subscriptions", requireUser, async (req, res) => {
   try {
     const subscription = readSubscription(req.body);
     if (!subscription) {
@@ -49,7 +50,7 @@ pushRouter.post("/subscriptions", async (req, res) => {
       return;
     }
 
-    await savePushSubscription(subscription);
+    await savePushSubscription({ ...subscription, userId: req.user!.id });
     res.status(201).json({ subscribed: true });
   } catch (error) {
     console.error("[push] failed to save subscription:", error);

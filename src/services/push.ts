@@ -43,7 +43,7 @@ function configureWebPush() {
   return true;
 }
 
-export async function savePushSubscription(input: PushSubscriptionInput) {
+export async function savePushSubscription(input: PushSubscriptionInput & { userId?: string }) {
   return prisma.pushSubscription.upsert({
     where: { endpoint: input.endpoint },
     create: {
@@ -53,6 +53,7 @@ export async function savePushSubscription(input: PushSubscriptionInput) {
       expirationTime:
         input.expirationTime === null ? null : new Date(input.expirationTime),
       userAgent: input.userAgent,
+      userId: input.userId ?? null,
     },
     update: {
       p256dh: input.keys.p256dh,
@@ -60,6 +61,7 @@ export async function savePushSubscription(input: PushSubscriptionInput) {
       expirationTime:
         input.expirationTime === null ? null : new Date(input.expirationTime),
       userAgent: input.userAgent,
+      userId: input.userId ?? null,
     },
   });
 }
