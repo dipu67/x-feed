@@ -162,6 +162,37 @@ export async function deleteMute(id: string): Promise<void> {
   await request<void>(`/mute-keywords/${id}`, { method: "DELETE" });
 }
 
+// ── Post actions ─────────────────────────────────────────────────────────
+
+export type WriteResult =
+  | { ok: true; tweetId: string; url: string }
+  | { ok: false; error: string; message?: string };
+
+export async function likeTweet(id: string): Promise<WriteResult> {
+  return request<WriteResult>(`/post/${id}/like`, { method: "POST" });
+}
+
+export async function retweetTweet(id: string): Promise<WriteResult> {
+  return request<WriteResult>(`/post/${id}/retweet`, { method: "POST" });
+}
+
+export async function replyToTweet(
+  id: string,
+  text: string,
+): Promise<WriteResult> {
+  return request<WriteResult>(`/post/${id}/reply`, {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  });
+}
+
+export async function postTweet(text: string): Promise<WriteResult> {
+  return request<WriteResult>("/post", {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  });
+}
+
 // ── Auth ──────────────────────────────────────────────────────────────────
 
 export type AuthUser = {
