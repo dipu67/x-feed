@@ -56,7 +56,7 @@ function LinkifiedText({ text }: { text: string }) {
           href={url}
           target="_blank"
           rel="noopener noreferrer"
-          className="break-all text-blue-500 underline underline-offset-2 hover:text-blue-400 dark:text-blue-400 dark:hover:text-blue-300"
+          className="break-all text-blue-500 hover:underline hover:underline-offset-2 hover:text-blue-400 dark:text-blue-400 dark:hover:text-blue-300"
         >
           {url}
         </a>,
