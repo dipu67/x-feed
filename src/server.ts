@@ -12,6 +12,7 @@ import { projectsRouter } from "./routes/projects.js";
 import { pushRouter } from "./routes/push.js";
 import { webhooksRouter } from "./routes/webhooks.js";
 import { filtersRouter, mutesRouter } from "./routes/filters.js";
+import { adminXAuthRouter } from "./routes/admin-xauth.js";
 
 export function createApp() {
   const app = express();
@@ -44,6 +45,7 @@ export function createApp() {
   app.use("/auth-tokens", authTokensRouter);
   app.use("/auth", authRouter);
   app.use("/admin", adminInvitesRouter);
+  app.use("/admin", adminXAuthRouter);
   app.use("/webhooks", webhooksRouter);
   app.use("/feed", feedRouter);
   app.use("/growth", growthRouter);
