@@ -27,10 +27,17 @@ export function parseCookies(header: string | undefined): Record<string, string>
   return out;
 }
 
+// Secure cookies require HTTPS — browsers silently drop them on plain HTTP,
+// which breaks the dev login flow on localhost. Keep Secure in production
+// and leave it off everywhere else so the cookie round-trips.
+function isSecureCookieEnv(): boolean {
+  return process.env.NODE_ENV === "production";
+}
+
 function setSessionCookie(res: Response, token: string, expiresAt: Date): void {
   res.cookie(SESSION_COOKIE, token, {
     httpOnly: true,
-    secure: true,
+    secure: isSecureCookieEnv(),
     sameSite: "lax",
     path: "/",
     expires: expiresAt,

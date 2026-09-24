@@ -33,6 +33,23 @@ describe("POST /auth/login", () => {
     expect(res.headers["set-cookie"]?.[0]).toMatch(/^xfeed_session=/);
   });
 
+  it("omits the Secure flag in non-production so HTTP dev can round-trip cookies", async () => {
+    // Secure cookies are silently dropped by browsers on plain HTTP, which
+    // breaks the dev login flow on localhost. Production must keep Secure;
+    // any other environment must omit it so the cookie round-trips.
+    const isProd = process.env.NODE_ENV === "production";
+    const res = await request(app)
+      .post("/auth/login")
+      .send({ email, password })
+      .expect(200);
+    const setCookie = res.headers["set-cookie"]?.[0] ?? "";
+    if (isProd) {
+      expect(setCookie).toMatch(/;\s*Secure/i);
+    } else {
+      expect(setCookie).not.toMatch(/;\s*Secure/i);
+    }
+  });
+
   it("401 on bad password", async () => {
     await request(app)
       .post("/auth/login")

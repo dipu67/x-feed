@@ -30,7 +30,10 @@ authRouter.post("/login", async (req, res) => {
   const { token, expiresAt } = await createSession(user.id);
   res.cookie(SESSION_COOKIE, token, {
     httpOnly: true,
-    secure: true,
+    // Secure requires HTTPS — browsers silently drop the cookie on plain
+    // HTTP, which breaks the dev login flow on localhost. Production keeps
+    // Secure; everywhere else (dev, preview, test) leaves it off.
+    secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
     expires: expiresAt,
@@ -113,7 +116,11 @@ authRouter.post("/accept-invite", async (req, res) => {
   });
   const { token: sessionToken, expiresAt } = await createSession(user.id);
   res.cookie(SESSION_COOKIE, sessionToken, {
-    httpOnly: true, secure: true, sameSite: "lax", path: "/", expires: expiresAt,
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    expires: expiresAt,
   });
   res.json({ id: user.id, email: user.email, displayName: user.displayName });
 });
