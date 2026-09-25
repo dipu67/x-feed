@@ -10,6 +10,7 @@ import {
   RefreshCw,
   TrendingUp,
 } from "lucide-react";
+import { PageHeader } from "@/components/page-header";
 import { toast } from "sonner";
 
 import {
@@ -380,169 +381,164 @@ export function GrowthView() {
   }, [users]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 sm:p-6">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Growth</h1>
-          <p className="text-sm text-muted-foreground">
-            Track follower, following, and tweet growth across your tracked
-            accounts. Default sort is by user ID.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Tabs
-            value={sortOrder}
-            onValueChange={(v: string) => setSortOrder(v as SortOrder)}
-          >
-            <TabsList variant="line" className="h-8">
-              <TabsTrigger value="asc">Asc</TabsTrigger>
-              <TabsTrigger value="desc">Desc</TabsTrigger>
-            </TabsList>
-          </Tabs>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => load("refresh")}
-            disabled={refreshing || loading}
-          >
-            <RefreshCw
-              className={`size-3.5 ${refreshing ? "animate-spin" : ""}`}
-              aria-hidden
-            />
-            Refresh
-          </Button>
-        </div>
-      </header>
-
-      <Tabs
-        value={range}
-        onValueChange={(v: string) => setRange(v as GrowthRange)}
+    <div className="flex flex-1 flex-col">
+      <PageHeader
+        title="Growth"
+        description="Follower, following, and tweet growth across tracked accounts"
       >
-        <TabsList>
-          {RANGES.map((r) => (
-            <TabsTrigger key={r.key} value={r.key}>
-              {r.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+        <Tabs
+          value={sortOrder}
+          onValueChange={(v: string) => setSortOrder(v as SortOrder)}
+        >
+          <TabsList variant="line" className="h-8">
+            <TabsTrigger value="asc">Asc</TabsTrigger>
+            <TabsTrigger value="desc">Desc</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => load("refresh")}
+          disabled={refreshing || loading}
+        >
+          <RefreshCw
+            className={`size-3.5 ${refreshing ? "animate-spin" : ""}`}
+            aria-hidden
+          />
+          Refresh
+        </Button>
+      </PageHeader>
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <SummaryCard
-          title="New followers"
-          icon={<TrendingUp className="size-4" />}
-          value={totals.seedFollowers}
-          loading={loading}
-        />
-        <SummaryCard
-          title="New tweets"
-          icon={<Flame className="size-4" />}
-          value={totals.tweetsDelta}
-          loading={loading}
-        />
-        <SummaryCard
-          title="Accounts with changes"
-          icon={<RefreshCw className="size-4" />}
-          value={totals.withChanges}
-          loading={loading}
-          disableFormat
-        />
-        <SummaryCard
-          title="Suspended"
-          icon={
-            <span className="text-base font-semibold text-destructive">!</span>
-          }
-          value={totals.suspended}
-          loading={loading}
-          disableFormat
-          danger={totals.suspended > 0}
-        />
-      </section>
+      <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 sm:p-6">
+        <Tabs
+          value={range}
+          onValueChange={(v: string) => setRange(v as GrowthRange)}
+        >
+          <TabsList>
+            {RANGES.map((r) => (
+              <TabsTrigger key={r.key} value={r.key}>
+                {r.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
 
-      <Card className="min-h-0 flex-1">
-        <CardHeader className="border-b">
-          <CardTitle>Projects · {rangeLabel(range)}</CardTitle>
-          <CardDescription>
-            Click any row to see the full change log. Deltas are computed
-            against the newest snapshot at or before the window start.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-0">
-          {loading && !data ? (
-            <GrowthSkeleton />
-          ) : users.length === 0 ? (
-            <Empty className="m-6 border border-dashed">
-              <EmptyHeader>
-                <EmptyMedia>
-                  <TrendingUp className="size-6 text-muted-foreground" />
-                </EmptyMedia>
-                <EmptyTitle>No tracked projects</EmptyTitle>
-                <EmptyDescription>
-                  Add a Twitter account on the Projects page to start
-                  tracking its growth.
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          ) : (
-            <GrowthTable
-              users={users}
-              onOpen={(user) => setDetail({ user, range })}
-            />
-          )}
-        </CardContent>
-      </Card>
+        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <SummaryCard
+            title="New followers"
+            icon={<TrendingUp className="size-4" />}
+            value={totals.seedFollowers}
+            loading={loading}
+          />
+          <SummaryCard
+            title="New tweets"
+            icon={<Flame className="size-4" />}
+            value={totals.tweetsDelta}
+            loading={loading}
+          />
+          <SummaryCard
+            title="Accounts with changes"
+            icon={<RefreshCw className="size-4" />}
+            value={totals.withChanges}
+            loading={loading}
+            disableFormat
+          />
+          <SummaryCard
+            title="Suspended"
+            icon={
+              <span className="text-base font-semibold text-destructive">!</span>
+            }
+            value={totals.suspended}
+            loading={loading}
+            disableFormat
+            danger={totals.suspended > 0}
+          />
+        </section>
 
-      <GrowthDetailDialog
-        detail={detail}
-        onClose={() => setDetail(null)}
-      />
+        <Card className="min-h-0 flex-1">
+          <CardHeader className="border-b">
+            <CardTitle>Projects · {rangeLabel(range)}</CardTitle>
+            <CardDescription>
+              Click any row to see the full change log. Deltas are computed
+              against the newest snapshot at or before the window start.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            {loading && !data ? (
+              <GrowthSkeleton />
+            ) : users.length === 0 ? (
+              <Empty className="m-6 border border-dashed">
+                <EmptyHeader>
+                  <EmptyMedia>
+                    <TrendingUp className="size-6 text-muted-foreground" />
+                  </EmptyMedia>
+                  <EmptyTitle>No tracked projects</EmptyTitle>
+                  <EmptyDescription>
+                    Add a Twitter account on the Projects page to start
+                    tracking its growth.
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            ) : (
+              <GrowthTable
+                users={users}
+                onOpen={(user) => setDetail({ user, range })}
+              />
+            )}
+          </CardContent>
+        </Card>
+
+        <GrowthDetailDialog
+          detail={detail}
+          onClose={() => setDetail(null)}
+        />
+      </div>
     </div>
   );
 }
-
-function SummaryCard({
-  title,
-  value,
-  icon,
-  loading,
-  disableFormat,
-  danger,
-}: {
-  title: string;
-  value: number;
-  icon: React.ReactNode;
-  loading: boolean;
-  disableFormat?: boolean;
-  danger?: boolean;
-}) {
-  const tone =
-    value > 0
-      ? "text-emerald-600 dark:text-emerald-400"
-      : value < 0
-        ? "text-rose-600 dark:text-rose-400"
-        : "text-foreground";
-  return (
-    <Card size="sm">
-      <CardHeader className="border-b-0 pb-1">
-        <CardDescription className="inline-flex items-center gap-1.5 text-xs uppercase tracking-wide">
-          {icon}
-          {title}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="pt-0">
-        {loading ? (
-          <Skeleton className="h-7 w-24" />
-        ) : (
-          <p
-            className={`text-2xl font-semibold tabular-nums ${danger ? "text-destructive" : tone}`}
-          >
-            {disableFormat ? value : formatDelta(value).text}
-          </p>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
+  function SummaryCard({
+    title,
+    value,
+    icon,
+    loading,
+    disableFormat,
+    danger,
+  }: {
+    title: string;
+    value: number;
+    icon: React.ReactNode;
+    loading: boolean;
+    disableFormat?: boolean;
+    danger?: boolean;
+  }) {
+    const tone =
+      value > 0
+        ? "text-emerald-600 dark:text-emerald-400"
+        : value < 0
+          ? "text-rose-600 dark:text-rose-400"
+          : "text-foreground";
+    return (
+      <Card size="sm">
+        <CardHeader className="border-b-0 pb-1">
+          <CardDescription className="inline-flex items-center gap-1.5 text-xs uppercase tracking-wide">
+            {icon}
+            {title}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {loading ? (
+            <Skeleton className="h-7 w-24" />
+          ) : (
+            <p
+              className={`text-2xl font-semibold tabular-nums ${danger ? "text-destructive" : tone}`}
+            >
+              {disableFormat ? value : formatDelta(value).text}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
 
 function GrowthTable({
   users,

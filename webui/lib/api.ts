@@ -10,6 +10,22 @@ import type {
 export const SOCKET_URL =
   process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://localhost:5500";
 
+// Admin routes are gated by the backend's x-admin-token, not the session.
+// The token is entered once per browser and kept in localStorage — requests
+// still go through the same-origin /api proxy.
+const ADMIN_TOKEN_KEY = "xfeed_admin_token";
+
+export function getAdminToken(): string {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(ADMIN_TOKEN_KEY) ?? "";
+}
+
+export function setAdminToken(token: string): void {
+  if (typeof window === "undefined") return;
+  if (token) window.localStorage.setItem(ADMIN_TOKEN_KEY, token);
+  else window.localStorage.removeItem(ADMIN_TOKEN_KEY);
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, {
     ...init,
@@ -318,4 +334,68 @@ export async function fetchGrowth(params: {
   if (params.sortOrder) q.set("sortOrder", params.sortOrder);
   if (params.userId) q.set("userId", params.userId);
   return request<GrowthResponse>(`/growth?${q.toString()}`);
+}
+
+// ── Admin (x-admin-token gated) ───────────────────────────────────────────
+
+export type Invite = {
+  id: string;
+  invitedById: string;
+  email: string | null;
+  createdAt: string;
+  expiresAt: string;
+};
+
+export type CreatedInvite = {
+  id: string;
+  /** Shown once — the backend only stores its hash. */
+  token: string;
+  expiresAt: string;
+};
+
+export type AdminTwitterHealth = {
+  accounts: Array<{ username: string; linkedToUser: boolean }>;
+};
+
+export type AdminPushHealth = {
+  total: number;
+  withUser: number;
+};
+
+async function adminRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  return request<T>(path, {
+    ...init,
+    headers: { "x-admin-token": getAdminToken(), ...init?.headers },
+  });
+}
+
+export async function fetchInvites(): Promise<Invite[]> {
+  const data = await adminRequest<{ invites?: Invite[] } | Invite[]>(
+    "/admin/users/invites",
+  );
+  return Array.isArray(data) ? data : (data.invites ?? []);
+}
+
+export function createInvite(input: {
+  invitedById: string;
+  email?: string;
+}): Promise<CreatedInvite> {
+  return adminRequest<CreatedInvite>("/admin/users/invites", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteInvite(id: string): Promise<void> {
+  await adminRequest<{ ok: boolean }>(`/admin/users/invites/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export async function fetchAdminTwitterHealth(): Promise<AdminTwitterHealth> {
+  return adminRequest<AdminTwitterHealth>("/admin/health/twitter");
+}
+
+export async function fetchAdminPushHealth(): Promise<AdminPushHealth> {
+  return adminRequest<AdminPushHealth>("/admin/health/push");
 }

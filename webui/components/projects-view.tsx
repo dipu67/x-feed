@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { MoreHorizontal, Plus, Search, FolderKanban } from "lucide-react";
 import { toast } from "sonner";
+import { PageHeader } from "@/components/page-header";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -120,29 +121,21 @@ export function ProjectsView() {
 
   return (
     <div className="flex flex-1 flex-col">
-      <div className="flex flex-col gap-4 border-b px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-lg font-semibold">Projects</h1>
-          <p className="text-sm text-muted-foreground">
-            Accounts the feed poller watches for new tweets
-          </p>
+      <PageHeader title="Projects" description="Accounts the feed poller watches for new tweets">
+        <div className="relative">
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="w-56 pl-8"
+            placeholder="Search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
         </div>
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              className="w-56 pl-8"
-              placeholder="Search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </div>
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus data-icon="inline-start" />
-            Add project
-          </Button>
-        </div>
-      </div>
+        <Button onClick={() => setCreateOpen(true)}>
+          <Plus data-icon="inline-start" />
+          Add project
+        </Button>
+      </PageHeader>
 
       {loading ? (
         <div className="space-y-3 p-6">

@@ -33,23 +33,28 @@ export function FeedView() {
   const [error, setError] = useState<string | null>(null);
 
   const notifications = useTweetNotifications();
-  const { user } = useUser();
+  const { user, loading: userLoading } = useUser();
   // Kept in refs so the socket effect can stay mounted once, without
   // resubscribing whenever the toggle or the item list changes.
   const notifyRef = useRef(notifications.notify);
   const seenRef = useRef<Set<string>>(new Set());
   const socketRef = useRef<ReturnType<typeof getSocket> | null>(null);
+  const filterRef = useRef<"mine" | undefined>(undefined);
 
   useEffect(() => {
     notifyRef.current = notifications.notify;
   }, [notifications.notify]);
 
   useEffect(() => {
+    filterRef.current = user ? "mine" : undefined;
+  }, [user]);
+
+  useEffect(() => {
+    // Wait for the auth check so the first fetch already carries the
+    // session — /feed requires a login and the "mine" filter personalizes it.
+    if (userLoading) return;
     let cancelled = false;
-    // Logged-in users get their personalized feed (follows + filters + mutes);
-    // anonymous viewers see the full public feed.
-    const filter = user ? "mine" : undefined;
-    fetchFeed(80, filter)
+    fetchFeed(80, user ? "mine" : undefined)
       .then((data) => {
         if (cancelled) return;
         const rows = data.items ?? [];
@@ -73,7 +78,7 @@ export function FeedView() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [userLoading, user]);
 
   useEffect(() => {
     const socket = getSocket();
@@ -82,7 +87,7 @@ export function FeedView() {
     socket.on("connect", () => {
       setConnected(true);
       // After a reconnect, re-fetch to catch any items missed while offline.
-      fetchFeed()
+      fetchFeed(80, filterRef.current)
         .then((data) => {
           const rows = data.items ?? [];
           rows.forEach((row) => seenRef.current.add(row.id));

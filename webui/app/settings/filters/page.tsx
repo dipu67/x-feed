@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,6 +15,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   createFilter,
   createMute,
@@ -94,7 +96,12 @@ export default function FiltersPage() {
   }
 
   return (
-    <main className="mx-auto max-w-2xl space-y-6 px-4 py-8">
+    <div className="flex flex-1 flex-col">
+      <PageHeader
+        title="Filters & mutes"
+        description="Personal rules applied to your feed and notifications"
+      />
+      <main className="mx-auto w-full max-w-2xl space-y-6 px-4 py-8">
       <Card>
         <CardHeader>
           <CardTitle>Filters</CardTitle>
@@ -189,10 +196,10 @@ export default function FiltersPage() {
               />
             </div>
             <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
+              <Switch
                 checked={muteIsRegex}
-                onChange={(e) => setMuteIsRegex(e.target.checked)}
+                onCheckedChange={(checked) => setMuteIsRegex(checked)}
+                aria-label="Treat pattern as regex"
               />
               Regex
             </label>
@@ -232,5 +239,6 @@ export default function FiltersPage() {
         </CardContent>
       </Card>
     </main>
+    </div>
   );
 }

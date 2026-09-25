@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -16,7 +16,6 @@ import { acceptInvite } from "@/lib/api";
 
 export default function AcceptInvitePage() {
   const params = useParams<{ token: string }>();
-  const router = useRouter();
   const token = params?.token ?? "";
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -29,7 +28,9 @@ export default function AcceptInvitePage() {
     setBusy(true);
     try {
       await acceptInvite(token, password, displayName || undefined);
-      router.push("/");
+      // Full navigation: the middleware's redirect-to-/login gets cached in
+      // Next's client router, and router.push/refresh can stay stuck on it.
+      window.location.assign("/");
     } catch (err) {
       setError(
         err instanceof Error

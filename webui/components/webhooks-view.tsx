@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Copy, Webhook } from "lucide-react";
 import { toast } from "sonner";
+import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -71,12 +72,10 @@ export function WebhooksView() {
 
   return (
     <div className="flex flex-1 flex-col">
-      <div className="border-b px-6 py-4">
-        <h1 className="text-lg font-semibold">Webhook</h1>
-        <p className="text-sm text-muted-foreground">
-          Add or update a tracked project from another service
-        </p>
-      </div>
+      <PageHeader
+        title="Webhook"
+        description="Add or update a tracked project from another service"
+      />
 
       {loading ? (
         <div className="space-y-3 p-6">

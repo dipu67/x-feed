@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { KeyRound, Plus } from "lucide-react";
 import { toast } from "sonner";
+import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -81,18 +82,12 @@ export function AuthTokensView() {
 
   return (
     <div className="flex flex-1 flex-col">
-      <div className="flex flex-col gap-4 border-b px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-lg font-semibold">X auth tokens</h1>
-          <p className="text-sm text-muted-foreground">
-            Cookie sessions the feed poller uses for usersByIds
-          </p>
-        </div>
+      <PageHeader title="X auth tokens" description="Cookie sessions the feed poller uses for usersByIds">
         <Button onClick={() => setCreateOpen(true)}>
           <Plus data-icon="inline-start" />
           Add token
         </Button>
-      </div>
+      </PageHeader>
 
       {loading ? (
         <div className="space-y-3 p-6">
