@@ -1,20 +1,12 @@
 import { Router } from "express";
 import { prisma } from "../db/prisma.js";
 import { requireUser } from "../auth/middleware.js";
-import { shouldShow } from "../feed/filter-evaluator.js";
+import { shouldShow, toFilterRule } from "../feed/filter-evaluator.js";
 
 export const feedRouter = Router();
 
-// Apply requireUser only when the client asks for their personal filter view.
-// The default (unauthenticated) feed keeps working for logged-out viewers.
-const requireUserForMine: import("express").RequestHandler = async (req, res, next) => {
-  if (req.query.filter !== "mine") {
-    next();
-    return;
-  }
-  return requireUser(req, res, next);
-};
-feedRouter.use(requireUserForMine);
+// The feed requires a session — there is no logged-out view.
+feedRouter.use(requireUser);
 
 feedRouter.get("/", async (req, res) => {
   try {
@@ -30,15 +22,21 @@ feedRouter.get("/", async (req, res) => {
     });
 
     let visible = items;
-    if (req.query.filter === "mine" && req.user) {
+    if (req.query.filter === "mine") {
+      const user = req.user!;
       const [follows, filters, mutes] = await Promise.all([
-        prisma.userFollow.findMany({ where: { userId: req.user.id } }),
-        prisma.filter.findMany({ where: { userId: req.user.id } }),
-        prisma.muteKeyword.findMany({ where: { userId: req.user.id } }),
+        prisma.userFollow.findMany({ where: { userId: user.id } }),
+        prisma.filter.findMany({ where: { userId: user.id } }),
+        prisma.muteKeyword.findMany({ where: { userId: user.id } }),
       ]);
       const followSet = new Set(follows.map((f) => f.projectId));
       visible = items.filter((item) =>
-        shouldShow({ projectId: item.projectId, text: item.text }, followSet, filters, mutes),
+        shouldShow(
+          { projectId: item.projectId, text: item.text },
+          followSet,
+          filters.map(toFilterRule),
+          mutes,
+        ),
       );
     }
 

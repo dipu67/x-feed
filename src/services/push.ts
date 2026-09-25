@@ -66,8 +66,12 @@ export async function savePushSubscription(input: PushSubscriptionInput & { user
   });
 }
 
-export async function removePushSubscription(endpoint: string) {
-  await prisma.pushSubscription.deleteMany({ where: { endpoint } });
+/** `userId` scopes the removal to one user's rows; omit it for internal
+ * cleanup where the endpoint is already known to belong to the record. */
+export async function removePushSubscription(endpoint: string, userId?: string) {
+  await prisma.pushSubscription.deleteMany({
+    where: userId ? { endpoint, userId } : { endpoint },
+  });
 }
 
 function pushStatusCode(error: unknown) {

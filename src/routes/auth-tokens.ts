@@ -7,8 +7,11 @@ import {
   type AuthTokenInput,
 } from "../services/auth-tokens.js";
 import { HttpError } from "../services/projects.js";
+import { requireUser } from "../auth/middleware.js";
 
 export const authTokensRouter = Router();
+
+authTokensRouter.use(requireUser);
 
 function readInput(body: unknown): AuthTokenInput {
   if (!body || typeof body !== "object") return {};

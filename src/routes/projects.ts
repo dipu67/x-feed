@@ -8,8 +8,11 @@ import {
   updateProject,
   type ProjectInput,
 } from "../services/projects.js";
+import { requireUser } from "../auth/middleware.js";
 
 export const projectsRouter = Router();
+
+projectsRouter.use(requireUser);
 
 function readProjectInput(body: unknown): ProjectInput {
   if (!body || typeof body !== "object") return {};

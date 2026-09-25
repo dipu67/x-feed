@@ -58,7 +58,7 @@ pushRouter.post("/subscriptions", requireUser, async (req, res) => {
   }
 });
 
-pushRouter.delete("/subscriptions", async (req, res) => {
+pushRouter.delete("/subscriptions", requireUser, async (req, res) => {
   try {
     const endpoint =
       req.body && typeof req.body === "object" &&
@@ -70,7 +70,9 @@ pushRouter.delete("/subscriptions", async (req, res) => {
       return;
     }
 
-    await removePushSubscription(endpoint);
+    // Scope the removal to the caller's own subscriptions so a known
+    // endpoint URL can't be used to unsubscribe someone else's device.
+    await removePushSubscription(endpoint, req.user!.id);
     res.json({ unsubscribed: true });
   } catch (error) {
     console.error("[push] failed to remove subscription:", error);

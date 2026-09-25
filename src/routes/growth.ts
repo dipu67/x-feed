@@ -1,7 +1,10 @@
 import { Router } from "express";
 import { prisma } from "../db/prisma.js";
+import { requireUser } from "../auth/middleware.js";
 
 export const growthRouter = Router();
+
+growthRouter.use(requireUser);
 
 export const RANGE_KEYS = ["1h", "12h", "24h", "7d", "all"] as const;
 export type RangeKey = (typeof RANGE_KEYS)[number];
