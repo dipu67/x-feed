@@ -197,14 +197,3 @@ bot.command("filters", async (ctx) => {
     await ctx.reply(`${f.name} [${state}] — ${f.kind}/${f.action}`);
   }
 });
-  switch (reason) {
-    case "not_linked":
-      return "Not linked. Use /link <token> first.";
-    case "no_project":
-      return "Project not found.";
-    case "invalid_regex":
-      return "Invalid regex.";
-    default:
-      return `Failed: ${reason}`;
-  }
-}

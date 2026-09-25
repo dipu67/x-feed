@@ -21,14 +21,13 @@ function makeItem(projectId: string, text: string): FeedItem {
 
 type FakeIo = {
   to: ReturnType<typeof vi.fn>;
+  emit: ReturnType<typeof vi.fn>;
 };
 
-function makeFakeIo(): FakeIo & { to: ReturnType<typeof vi.fn> } {
+function makeFakeIo(): FakeIo {
   const emit = vi.fn();
   const to = vi.fn().mockReturnValue({ emit });
-  return { to, emit } as unknown as FakeIo & {
-    to: ReturnType<typeof vi.fn>;
-  };
+  return { to, emit };
 }
 
 beforeEach(async () => {

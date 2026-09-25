@@ -1,17 +1,17 @@
 import webpush from "web-push";
 import type { Server as SocketServer } from "socket.io";
 import { prisma } from "../db/prisma.js";
-import { shouldShow } from "../feed/filter-evaluator.js";
+import { shouldShow, toFilterRule } from "../feed/filter-evaluator.js";
 import type { FeedItem } from "../generated/prisma/client.js";
 
 type DispatcherOpts = {
   concurrency?: number;
-  io?: SocketServer;
+  io?: SocketServer | undefined;
 };
 
 export class PushDispatcher {
   private readonly concurrency: number;
-  private readonly io?: SocketServer;
+  private readonly io: SocketServer | undefined;
   constructor(opts: DispatcherOpts = {}) {
     this.concurrency = opts.concurrency ?? 16;
     this.io = opts.io;
@@ -51,7 +51,7 @@ export class PushDispatcher {
       !shouldShow(
         { projectId: item.projectId, text: item.text },
         new Set([item.projectId]),
-        filters,
+        filters.map(toFilterRule),
         mutes,
       )
     ) {

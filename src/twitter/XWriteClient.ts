@@ -86,10 +86,12 @@ export class XWriteClient {
       if (res.status === 429) {
         const j = (await res.json().catch(() => ({}))) as { retry_after_ms?: number };
         this.breaker.recordFailure(new Error("429"));
+        const retryAfterMs =
+          typeof j.retry_after_ms === "number" ? j.retry_after_ms : undefined;
         return {
           ok: false,
           error: "rate_limited",
-          retryAfterMs: typeof j.retry_after_ms === "number" ? j.retry_after_ms : undefined,
+          ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
           message: "rate limited",
         };
       }

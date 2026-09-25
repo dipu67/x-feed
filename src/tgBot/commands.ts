@@ -1,6 +1,6 @@
 import { prisma } from "../db/prisma.js";
 import { sha256Hex } from "../auth/tokens.js";
-import { shouldShow } from "../feed/filter-evaluator.js";
+import { shouldShow, toFilterRule } from "../feed/filter-evaluator.js";
 
 export type LinkResult = { ok: true } | { ok: false; reason: "invalid" };
 export type WhoamiResult =
@@ -188,7 +188,7 @@ export async function handleFeedCommand(
     shouldShow(
       { projectId: i.projectId, text: i.text },
       followSet,
-      filters,
+      filters.map(toFilterRule),
       mutes,
     ),
   );

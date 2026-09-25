@@ -13,6 +13,28 @@ export type MuteRule = {
   isRegex: boolean;
 };
 
+/** Coerce a Prisma Filter row (kind/action are plain String columns) into the
+ * narrowed shape shouldShow operates on. Write-time validation in
+ * routes/filters.ts only ever stores "project"/"keyword" and "keep"/"hide",
+ * so values outside those never legitimately occur; unknown values coerce to
+ * the keyword/hide side and simply never match. */
+export function toFilterRule(row: {
+  kind: string;
+  projectId: string | null;
+  pattern: string | null;
+  action: string;
+  isActive: boolean;
+}): FilterRule {
+  const rule: FilterRule = {
+    kind: row.kind === "project" ? "project" : "keyword",
+    action: row.action === "keep" ? "keep" : "hide",
+    isActive: row.isActive,
+  };
+  if (row.projectId !== null) rule.projectId = row.projectId;
+  if (row.pattern !== null) rule.pattern = row.pattern;
+  return rule;
+}
+
 const compiledRegexCache = new WeakMap<MuteRule, RegExp | null>();
 
 function muteMatcher(m: MuteRule): RegExp | null {

@@ -62,6 +62,8 @@ describe("PushDispatcher.dispatchToFollowers (Review Focus #4)", () => {
       likes: 0,
       reposts: 0,
       replies: 0,
+      payload: {},
+      detectedAt: new Date(),
     });
     expect(sendNotification).toHaveBeenCalledTimes(1);
   });
@@ -80,6 +82,8 @@ describe("PushDispatcher.dispatchToFollowers (Review Focus #4)", () => {
       likes: 0,
       reposts: 0,
       replies: 0,
+      payload: {},
+      detectedAt: new Date(),
     });
     const count = await prisma.pushSubscription.count({ where: { userId } });
     expect(count).toBe(0);
@@ -118,6 +122,8 @@ describe("PushDispatcher.dispatchToFollowers (Review Focus #4)", () => {
       likes: 0,
       reposts: 0,
       replies: 0,
+      payload: {},
+      detectedAt: new Date(),
     });
     const elapsed = Date.now() - t0;
     // 50 sequential @10ms would be 500ms; with concurrency it should be well under.
@@ -176,6 +182,8 @@ describe("PushDispatcher.dispatchToFollowers (Review Focus #4)", () => {
       likes: 0,
       reposts: 0,
       replies: 0,
+      payload: {},
+      detectedAt: new Date(),
     });
 
     expect(maxInFlight).toBeLessThanOrEqual(CAP);

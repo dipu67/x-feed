@@ -1,6 +1,6 @@
-import argon2 from "argon2";
+import argon2, { type HashOptions } from "argon2";
 
-const OPTIONS: argon2.Options = {
+const OPTIONS: HashOptions = {
   type: argon2.argon2id,
   memoryCost: 19 * 1024, // 19 MiB
   timeCost: 2,

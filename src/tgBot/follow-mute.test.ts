@@ -65,7 +65,7 @@ async function linkChat(): Promise<void> {
 }
 
 async function projectUsername(): Promise<string> {
-  const p = await prisma.project.findUniqueOrThrow({ where: { userId: projectIds[0] } });
+  const p = await prisma.project.findUniqueOrThrow({ where: { userId: projectIds[0]! } });
   return p.username;
 }
 
@@ -87,7 +87,7 @@ describe("handleFollowCommand", () => {
     const result = await handleFollowCommand(chatId, username);
     expect(result).toEqual({ ok: true });
     const follows = await prisma.userFollow.findMany({
-      where: { userId: inviterId, projectId: projectIds[0] },
+      where: { userId: inviterId, projectId: projectIds[0]! },
     });
     expect(follows).toHaveLength(1);
   });
@@ -106,7 +106,7 @@ describe("handleUnfollowCommand", () => {
     const result = await handleUnfollowCommand(chatId, username);
     expect(result).toEqual({ ok: true });
     const follows = await prisma.userFollow.findMany({
-      where: { userId: inviterId, projectId: projectIds[0] },
+      where: { userId: inviterId, projectId: projectIds[0]! },
     });
     expect(follows).toHaveLength(0);
   });
