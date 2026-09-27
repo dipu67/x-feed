@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import {
   Rss,
+  Zap,
   FolderKanban,
   KeyRound,
   Webhook,
@@ -27,6 +28,7 @@ import {
 
 const nav = [
   { title: "Feed", href: "/", icon: Rss },
+  { title: "Alpha", href: "/alpha", icon: Zap },
   { title: "Projects", href: "/projects", icon: FolderKanban },
   { title: "Keywords", href: "/keywords", icon: Tags },
   { title: "Growth", href: "/growth", icon: TrendingUp },
