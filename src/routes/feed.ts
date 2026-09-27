@@ -10,10 +10,13 @@ feedRouter.get("/", async (req, res) => {
       ? Math.min(Math.max(rawLimit, 1), 200)
       : 50;
 
+    const matchedOnly = ["1", "true"].includes(String(req.query.matched ?? ""));
+
     const items = await prisma.feedItem.findMany({
       take: limit,
       orderBy: { detectedAt: "desc" },
       include: { project: true },
+      ...(matchedOnly ? { where: { matchedCount: { gt: 0 } } } : {}),
     });
 
     res.json({
@@ -29,6 +32,7 @@ feedRouter.get("/", async (req, res) => {
         replies: item.replies,
         payload: item.payload,
         detectedAt: item.detectedAt.toISOString(),
+        matchedKeywords: item.matchedKeywords ?? null,
         project: {
           userId: item.project.userId,
           name: item.project.name,
