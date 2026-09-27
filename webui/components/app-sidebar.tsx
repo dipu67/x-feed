@@ -3,7 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
-import { Rss, FolderKanban, KeyRound, Webhook, TrendingUp } from "lucide-react";
+import {
+  Rss,
+  FolderKanban,
+  KeyRound,
+  Webhook,
+  TrendingUp,
+  Tags,
+} from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -21,6 +28,7 @@ import {
 const nav = [
   { title: "Feed", href: "/", icon: Rss },
   { title: "Projects", href: "/projects", icon: FolderKanban },
+  { title: "Keywords", href: "/keywords", icon: Tags },
   { title: "Growth", href: "/growth", icon: TrendingUp },
   { title: "Auth tokens", href: "/auth-tokens", icon: KeyRound },
   { title: "Webhook", href: "/webhooks", icon: Webhook },
