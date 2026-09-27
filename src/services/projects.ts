@@ -3,16 +3,9 @@ import { prisma } from "../db/prisma.js";
 import { fxTwitter } from "../fxTwitter/client.js";
 import { seedStatusesCursorTop } from "../fxTwitter/statuses.js";
 import type { APIUser } from "../fxTwitter/types.js";
+import { HttpError } from "../lib/http-error.js";
 
-export class HttpError extends Error {
-  readonly status: number;
-
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
-    this.name = "HttpError";
-  }
-}
+export { HttpError };
 
 export type ProjectInput = {
   username?: string;
