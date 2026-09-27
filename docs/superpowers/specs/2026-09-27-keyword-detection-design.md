@@ -58,9 +58,11 @@ serve the Alpha view.
 
 Pure module, no I/O:
 
-- `compileKeywordMatcher(keywords: { phrase: string }[]): Matcher`
-- `Matcher.match(text: string): string[]` — matched phrases, deduped, in the
-  order they appear in the keyword list.
+- `compileKeywordMatcher(keywords: KeywordLike[]): Matcher` where
+  `KeywordLike = { phrase: string; tag: string | null }`
+- `Matcher.match(text: string): MatchedKeyword[]` — matched
+  `{ phrase, tag }` pairs (§8 shape), deduped by phrase, in keyword-list
+  order.
 
 Semantics:
 
