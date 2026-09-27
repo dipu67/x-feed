@@ -2,6 +2,8 @@ import type {
   AuthToken,
   AuthTokenInput,
   FeedItem,
+  Keyword,
+  KeywordInput,
   Project,
   ProjectInput,
   WebhookInfo,
@@ -62,8 +64,13 @@ export function deleteProject(userId: string) {
   });
 }
 
-export async function fetchFeed(limit = 80) {
-  const data = await request<{ items?: FeedItem[] }>(`/feed?limit=${limit}`);
+export async function fetchFeed(
+  options: { limit?: number; matched?: boolean } = {},
+) {
+  const limit = options.limit ?? 80;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (options.matched) params.set("matched", "1");
+  const data = await request<{ items?: FeedItem[] }>(`/feed?${params}`);
   return { items: Array.isArray(data.items) ? data.items : [] };
 }
 
@@ -181,4 +188,29 @@ export async function fetchGrowth(params: {
   if (params.sortOrder) q.set("sortOrder", params.sortOrder);
   if (params.userId) q.set("userId", params.userId);
   return request<GrowthResponse>(`/growth?${q.toString()}`);
+}
+
+export async function fetchKeywords() {
+  const data = await request<{ keywords?: Keyword[] }>("/keywords");
+  return { keywords: Array.isArray(data.keywords) ? data.keywords : [] };
+}
+
+export function createKeyword(input: KeywordInput) {
+  return request<{ keyword: Keyword }>("/keywords", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateKeyword(id: string, input: KeywordInput) {
+  return request<{ keyword: Keyword }>(`/keywords/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteKeyword(id: string) {
+  return request<{ deleted: boolean; id: string }>(`/keywords/${id}`, {
+    method: "DELETE",
+  });
 }
