@@ -29,6 +29,7 @@ import {
   resolveAuthor,
   statusUrl,
 } from "@/lib/x";
+import Image from "next/image";
 
 function initials(name: string) {
   return name.slice(0, 2).toUpperCase();
@@ -56,7 +57,7 @@ function LinkifiedText({ text }: { text: string }) {
           href={url}
           target="_blank"
           rel="noopener noreferrer"
-          className="break-all text-blue-500 underline underline-offset-2 hover:text-blue-400 dark:text-blue-400 dark:hover:text-blue-300"
+          className="break-all text-blue-500 hover:underline hover:underline-offset-2 hover:text-blue-400 dark:text-blue-400 dark:hover:text-blue-300"
         >
           {url}
         </a>,
@@ -95,11 +96,13 @@ function Media({
         )}
       >
         {photos.slice(0, 4).map((photo) => (
-          <img
+          <Image
             key={photo.url}
             src={photo.url}
             alt={photo.altText ?? ""}
             className="max-h-80 w-full object-cover"
+            width={photo.width}
+            height={photo.height}
           />
         ))}
       </div>
@@ -136,11 +139,13 @@ function QuoteMedia({ media }: { media: FeedMedia | undefined }) {
         )}
       >
         {photos.slice(0, 4).map((photo) => (
-          <img
+          <Image
             key={photo.url}
             src={photo.url}
             alt={photo.altText ?? ""}
             className="max-h-56 w-full object-cover"
+            width={photo.width}
+            height={photo.height}
           />
         ))}
       </div>
@@ -151,10 +156,12 @@ function QuoteMedia({ media }: { media: FeedMedia | undefined }) {
   return (
     <div className="relative mt-2 overflow-hidden rounded-lg border">
       {video.thumbnail_url ? (
-        <img
+        <Image
           src={video.thumbnail_url}
           alt=""
           className="max-h-56 w-full object-cover"
+          width={video.width}
+          height={video.height}
         />
       ) : (
         <div className="h-32 w-full bg-muted" />
@@ -221,7 +228,7 @@ function QuotedTweet({ quote }: { quote: FeedQuote }) {
         </span>
       </div>
       {quote.text ? (
-        <p className="mt-1 break-words whitespace-pre-wrap text-sm leading-6">
+        <p className="mt-1 wrap-break-word whitespace-pre-wrap text-sm leading-6">
           {quote.text}
         </p>
       ) : null}
@@ -238,7 +245,7 @@ export function FeedItemCard({
   isNew?: boolean;
 }) {
   const payload = item.payload;
-  const author = payload?.author;
+  // const author = payload?.author;
   const repostedBy = payload?.reposted_by;
   const replyingTo = payload?.replying_to;
   const quote = payload?.quote;
@@ -332,7 +339,7 @@ export function FeedItemCard({
               Replying to @{replyingTo.screen_name}
             </a>
           ) : null}
-          <p className="mt-1 break-words whitespace-pre-wrap text-sm leading-6">
+          <p className="mt-1 wrap-break-word whitespace-pre-wrap text-sm leading-6">
             <LinkifiedText text={item.text} />
           </p>
           <Media media={payload?.media} className="mt-3" />

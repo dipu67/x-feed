@@ -1731,8 +1731,10 @@ function HighlightMatches({
   phrases: string[];
 }) {
   if (text === "" || phrases.length === 0) return <>{text}</>;
+  // Longest-first so "mint live" wins over "mint" at the same position.
+  const ordered = [...phrases].sort((a, b) => b.length - a.length);
   const pattern = new RegExp(
-    `(?<![\\p{L}\\p{N}])(${phrases.map(escapeRegExp).join("|")})(?![\\p{L}\\p{N}])`,
+    `(?<![\\p{L}\\p{N}])(${ordered.map(escapeRegExp).join("|")})(?![\\p{L}\\p{N}])`,
     "giu",
   );
   const parts = text.split(pattern);
