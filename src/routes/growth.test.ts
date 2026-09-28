@@ -108,3 +108,38 @@ describe("GET /growth baselines from rollups", () => {
     expect(row.followersDelta).toBe(200);
   });
 });
+
+describe("GET /growth/trend", () => {
+  it("401 for anonymous requests", async () => {
+    await request(app)
+      .get(`/growth/trend?userId=${projectId}&range=24h`)
+      .expect(401);
+  });
+
+  it("24h and 7d read hourly buckets, 30d reads daily", async () => {
+    const hourly = await request(app)
+      .get(`/growth/trend?userId=${projectId}&range=7d`)
+      .set("Cookie", cookie)
+      .expect(200);
+    expect(hourly.body.range).toBe("7d");
+    const hPoints = hourly.body.points as Array<{
+      t: string;
+      followers: number;
+    }>;
+    expect(hPoints.length).toBe(2); // the two hourly buckets
+    expect(hPoints[0]!.followers).toBe(1000); // ascending order
+    expect(hPoints[1]!.followers).toBe(1100);
+
+    const daily = await request(app)
+      .get(`/growth/trend?userId=${projectId}&range=30d`)
+      .set("Cookie", cookie)
+      .expect(200);
+    const dPoints = daily.body.points as Array<{ followers: number }>;
+    expect(dPoints.length).toBe(1); // only the daily bucket
+    expect(dPoints[0]!.followers).toBe(900);
+  });
+
+  it("400 without userId", async () => {
+    await request(app).get("/growth/trend").set("Cookie", cookie).expect(400);
+  });
+});

@@ -2,6 +2,8 @@ import { Router } from "express";
 import { prisma } from "../db/prisma.js";
 import { requireUser } from "../auth/middleware.js";
 import { Prisma } from "../generated/prisma/client.js";
+import type { TrendRange } from "../lib/bucket.js";
+import { trendWindow, parseTrendRange } from "../lib/bucket.js";
 
 export const growthRouter = Router();
 
@@ -265,6 +267,38 @@ growthRouter.get("/", async (req, res) => {
     });
   } catch (error) {
     console.error("[growth]", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Internal server error",
+    });
+  }
+});
+
+growthRouter.get("/trend", async (req, res) => {
+  try {
+    const userId =
+      typeof req.query.userId === "string" ? req.query.userId : null;
+    if (!userId) {
+      res.status(400).json({ error: "userId required" });
+      return;
+    }
+    const range: TrendRange = parseTrendRange(req.query.range);
+    const { granularity, since } = trendWindow(range);
+    const rows = await prisma.projectMetricRollup.findMany({
+      where: { projectId: userId, granularity, bucketStart: { gte: since } },
+      orderBy: { bucketStart: "asc" },
+    });
+    res.json({
+      userId,
+      range,
+      points: rows.map((r) => ({
+        t: r.bucketStart.toISOString(),
+        followers: r.followers,
+        following: r.following,
+        tweets: r.tweets,
+      })),
+    });
+  } catch (error) {
+    console.error("[growth:trend]", error);
     res.status(500).json({
       error: error instanceof Error ? error.message : "Internal server error",
     });
