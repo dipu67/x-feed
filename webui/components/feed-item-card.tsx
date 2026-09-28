@@ -149,6 +149,7 @@ function Media({
             src={photo.url}
             alt={photo.altText ?? ""}
             className="max-h-80 w-full object-cover"
+            loading="eager"
             width={photo.width}
             height={photo.height}
           />
@@ -192,6 +193,7 @@ function QuoteMedia({ media }: { media: FeedMedia | undefined }) {
             src={photo.url}
             alt={photo.altText ?? ""}
             className="max-h-56 w-full object-cover"
+            loading="eager"
             width={photo.width}
             height={photo.height}
           />
@@ -208,6 +210,7 @@ function QuoteMedia({ media }: { media: FeedMedia | undefined }) {
           src={video.thumbnail_url}
           alt=""
           className="max-h-56 w-full object-cover"
+          loading="eager"
           width={video.width}
           height={video.height}
         />
