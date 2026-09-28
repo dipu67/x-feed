@@ -34,16 +34,11 @@ export function FeedView() {
 
   const notifications = useTweetNotifications();
   const { user, loading: userLoading } = useUser();
-  // Kept in refs so the socket effect can stay mounted once, without
-  // resubscribing whenever the toggle or the item list changes.
-  const notifyRef = useRef(notifications.notify);
+  // The toggle manages the web-push subscription; notifications themselves
+  // come solely from the service worker. The socket only updates the list.
   const seenRef = useRef<Set<string>>(new Set());
   const socketRef = useRef<ReturnType<typeof getSocket> | null>(null);
   const filterRef = useRef<"mine" | undefined>(undefined);
-
-  useEffect(() => {
-    notifyRef.current = notifications.notify;
-  }, [notifications.notify]);
 
   useEffect(() => {
     filterRef.current = user ? "mine" : undefined;
@@ -105,7 +100,7 @@ export function FeedView() {
     const onDisconnect = () => setConnected(false);
     const onFeedNew = (item: FeedItem) => {
       // The poller re-emits items it re-upserts, so drop repeats before they
-      // reach the list or fire a notification.
+      // reach the list. Notifications come solely from the service worker.
       if (seenRef.current.has(item.id)) return;
       seenRef.current.add(item.id);
 
@@ -115,7 +110,6 @@ export function FeedView() {
         next.add(item.id);
         return next;
       });
-      notifyRef.current(item);
       window.setTimeout(() => {
         setNewIds((current) => {
           const next = new Set(current);
