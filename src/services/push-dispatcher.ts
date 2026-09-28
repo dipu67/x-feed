@@ -32,53 +32,56 @@ export class PushDispatcher {
     }
   }
 
-  async dispatchToFollowers(item: FeedItem): Promise<void> {
-    const follows = await prisma.userFollow.findMany({
-      where: { projectId: item.projectId },
-    });
-    await Promise.all(follows.map((f) => this.dispatchToUser(f.userId, item)));
+  /**
+   * Global broadcast: every push subscription receives every tweet. No
+   * follow requirement. A subscription belonging to a logged-in user still
+   * honors that user's own filters/mutes; anonymous subscriptions always
+   * receive everything. Socket fan-out is NOT done here — feed.ts emits
+   * `feed:new` globally, so per-room emits would only duplicate it.
+   */
+  async dispatchToAllSubscribers(item: FeedItem): Promise<void> {
+    const subs = await prisma.pushSubscription.findMany();
+    const filterCache = new Map<string, boolean>();
+    const jobs: Array<() => Promise<void>> = [];
+
+    for (const sub of subs) {
+      if (sub.userId !== null) {
+        let show = filterCache.get(sub.userId);
+        if (show === undefined) {
+          show = await this.userAllows(sub.userId, item);
+          filterCache.set(sub.userId, show);
+        }
+        if (!show) continue;
+      }
+      const payload = JSON.stringify({
+        title: `@${item.username}`,
+        body: item.text.slice(0, 200),
+        url: item.tweetUrl,
+        tag: `${item.projectId}:${item.id}`,
+      });
+      jobs.push(() => this.sendOne(sub.endpoint, sub.p256dh, sub.auth, payload));
+    }
+    await this.runPool(jobs);
   }
 
-  async dispatchToUser(userId: string, item: FeedItem): Promise<void> {
+  /** Does this user's filter/mute configuration allow the item through? */
+  private async userAllows(userId: string, item: FeedItem): Promise<boolean> {
     const [filters, mutes] = await Promise.all([
       prisma.filter.findMany({ where: { userId, isActive: true } }),
       prisma.muteKeyword.findMany({ where: { userId } }),
     ]);
-    // Per-user filter check. Since dispatchToFollowers only fans out to users
-    // who follow the project, the follows set for shouldShow is just the
-    // current project — the per-user follow happened at dispatch-time.
-    if (
-      !shouldShow(
-        { projectId: item.projectId, text: item.text },
-        new Set([item.projectId]),
-        filters.map(toFilterRule),
-        mutes,
-      )
-    ) {
-      return;
-    }
-    // Live socket fan-out — only when the server is wired with an io
-    // instance. Web Push still runs below so offline devices get notified.
-    this.io?.to(`user:${userId}`).emit("feed:new", {
-      id: item.id,
-      text: item.text,
-      tweetUrl: item.tweetUrl,
-    });
-    const subs = await prisma.pushSubscription.findMany({ where: { userId } });
-    const payload = JSON.stringify({
-      title: `@${item.username}`,
-      body: item.text.slice(0, 200),
-      url: item.tweetUrl,
-      tag: `${item.projectId}:${item.id}`,
-    });
-    await this.runPool(subs.map((s) => () => this.sendOne(s.endpoint, s.p256dh, s.auth, payload)));
+    return shouldShow(
+      { projectId: item.projectId, text: item.text },
+      new Set([item.projectId]),
+      filters.map(toFilterRule),
+      mutes,
+    );
   }
 
   /**
    * Run a list of thunks with at most `this.concurrency` invocations in
-   * flight at any time. Without this, dispatching to a user with thousands
-   * of push subscriptions would fire every web-push call at once and
-   * saturate the host's outbound sockets.
+   * flight at any time. Without this, dispatching thousands of push calls
+   * at once would saturate the host's outbound sockets.
    */
   private async runPool(jobs: Array<() => Promise<void>>): Promise<void> {
     const cap = Math.max(1, this.concurrency);

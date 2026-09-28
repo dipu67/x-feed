@@ -156,7 +156,7 @@ async function persistAndEmit(
       },
     };
     io.emit("feed:new", feedEvent);
-    void getDispatcher(io).dispatchToFollowers(item);
+    void getDispatcher(io).dispatchToAllSubscribers(item);
 
     // Keyword matches also alert the operator chat on Telegram. Per-user push
     // is the dispatcher's job above; this is the global alpha alert.
