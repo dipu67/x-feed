@@ -74,6 +74,7 @@ model Project {
   feedItems       FeedItem[]
   snapshots       ProjectSnapshot[]
   changes         ProjectChange[]
+  rollups         ProjectMetricRollup[]
   follows         UserFollow[]
   filters         Filter[]
 
@@ -119,6 +120,24 @@ model ProjectChange {
   @@index([changedAt(sort: Desc)])
   @@index([field])
   @@map("project_changes")
+}
+
+/// Bucketed follower/following/tweet counts for trend charts and growth
+/// baselines. `granularity` is "hour" or "day"; values are the last poller
+/// observation inside the bucket. Upserted per cycle — jitter updates the
+/// bucket instead of creating rows, so the table is size-bounded.
+model ProjectMetricRollup {
+  projectId   String   @map("project_id")
+  project     Project  @relation(fields: [projectId], references: [userId], onDelete: Cascade)
+  granularity String
+  bucketStart DateTime @map("bucket_start") @db.Timestamptz
+  followers   Int
+  following   Int
+  tweets      Int
+
+  @@unique([projectId, granularity, bucketStart])
+  @@index([granularity, bucketStart])
+  @@map("project_metric_rollups")
 }
 
 /// A browser/device endpoint that opted into Web Push. No application account
