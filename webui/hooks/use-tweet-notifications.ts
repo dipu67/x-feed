@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { FeedItem } from "@/lib/types";
-import { KIND_LABEL, postKinds, resolveAuthor } from "@/lib/x";
 
 const STORAGE_KEY = "x-feed:notifications";
 /** Bursts of tweets shouldn't machine-gun the chime. */
 const SOUND_COOLDOWN_MS = 800;
-const BODY_MAX = 160;
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 
 /**
@@ -128,21 +125,6 @@ async function unsubscribeFromPush() {
   });
 }
 
-function notificationText(item: FeedItem) {
-  const { displayName, handle, avatar } = resolveAuthor(item);
-  const [kind] = postKinds(item.payload);
-  const who = `${displayName} (@${handle})`;
-  const body =
-    item.text.length > BODY_MAX
-      ? `${item.text.slice(0, BODY_MAX).trimEnd()}…`
-      : item.text;
-  return {
-    title: kind ? `${KIND_LABEL[kind]} · ${who}` : who,
-    body,
-    icon: avatar ?? undefined,
-  };
-}
-
 export function useTweetNotifications() {
   const [supported, setSupported] = useState(false);
   const [enabled, setEnabled] = useState(false);
@@ -160,9 +142,8 @@ export function useTweetNotifications() {
     setSupported(ok);
     if (!ok) return;
 
-    // Register before a tweet arrives. Registering only inside `notify` is too
-    // late on Android: its main-thread Notification API is unavailable and the
-    // worker may not be active until after the event has been handled.
+    // Register before the user toggles push on. Android requires an active
+    // service worker before it accepts a push subscription.
     void getServiceWorkerRegistration();
 
     setPermission(Notification.permission);
@@ -247,51 +228,13 @@ export function useTweetNotifications() {
     [apply, audioContext],
   );
 
-  const notify = useCallback((item: FeedItem) => {
+  /**
+   * Sound only. Notifications themselves come exclusively from the server's
+   * web push (handled by /sw.js) — showing them here too made every tweet
+   * arrive twice while the tab was open.
+   */
+  const notify = useCallback(() => {
     if (!enabledRef.current) return;
-    if (typeof window === "undefined" || Notification.permission !== "granted") {
-      return;
-    }
-
-    const { title, body, icon } = notificationText(item);
-
-    // Service-worker path — required on Android Chrome.
-    const swPromise = getServiceWorkerRegistration();
-    swPromise.then(async (sw) => {
-      if (sw) {
-        try {
-          await sw.showNotification(title, {
-            body,
-            icon,
-            tag: item.id,
-            data: { url: item.tweetUrl },
-          });
-          return; // notification shown, play sound below
-        } catch {
-          // Fall through to main-thread path.
-        }
-      }
-
-      // Main-thread path — works on desktop browsers.
-      try {
-        const notification = new Notification(title, {
-          body,
-          icon,
-          tag: item.id,
-        });
-        notification.onclick = () => {
-          window.open(item.tweetUrl, "_blank", "noopener,noreferrer");
-          notification.close();
-        };
-      } catch (e) {
-        // Some browsers (notably Android Chrome) only allow notifications via a
-        // service worker; the sound below still fires.
-        if (e instanceof Error && /service worker/i.test(e.message)) {
-          playChime(audioContext());
-          return;
-        }
-      }
-    });
 
     const now = Date.now();
     if (now - lastSoundRef.current < SOUND_COOLDOWN_MS) return;
@@ -299,7 +242,7 @@ export function useTweetNotifications() {
     try {
       playChime(audioContext());
     } catch {
-      // Audio unavailable — notifications still work.
+      // Audio unavailable — the push notification still works.
     }
   }, [audioContext]);
 
