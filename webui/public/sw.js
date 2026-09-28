@@ -1,57 +1,19 @@
-// Service worker for x-feed PWA — push notifications, offline feed cache, and
-// network-first for auth/filter state. Android Chrome blocks `new Notification()`
-// — notifications must go through `self.registration.showNotification()`.
-
-const SHELL_CACHE = "x-feed-shell-v1";
-const FEED_CACHE = "x-feed-feed-v1";
-const SHELL = ["/"];
+// Service worker for x-feed PWA — push notifications only. No fetch caching:
+// the feed must always show the latest tweets, and caching caused stale
+// lists to render before the fresh response arrived.
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(
-    caches
-      .open(SHELL_CACHE)
-      .then((cache) => cache.addAll(SHELL))
-      .then(() => self.skipWaiting()),
-  );
+  e.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener("activate", (e) => {
+  // Drop caches left behind by earlier versions of this worker.
   e.waitUntil(
     caches
       .keys()
-      .then((names) =>
-        Promise.all(
-          names
-            .filter((n) => n !== SHELL_CACHE && n !== FEED_CACHE)
-            .map((n) => caches.delete(n)),
-        ),
-      )
+      .then((names) => Promise.all(names.map((name) => caches.delete(name))))
       .then(() => self.clients.claim()),
   );
-});
-
-self.addEventListener("fetch", (e) => {
-  const url = new URL(e.request.url);
-  // The Next.js rewrite prefix from next.config.ts maps `/api/*` onto the
-  // backend, so requests inside the SW always start with `/api/`. Strip the
-  // prefix when matching the cached-path predicates below.
-  const apiPath = url.pathname.replace(/^\/api/, "");
-  // Stale-while-revalidate keeps the home page snappy when offline and bounds
-  // the feed cache to the most recent 50 responses.
-  if (apiPath === "/feed" || apiPath.startsWith("/feed?")) {
-    e.respondWith(staleWhileRevalidate(e.request, FEED_CACHE, 50));
-    return;
-  }
-  // Network-first for auth state and per-user filters so a freshly-logged-in
-  // browser doesn't see stale "anonymous" data when the network is up.
-  if (
-    apiPath === "/auth/me" ||
-    apiPath.startsWith("/filters") ||
-    apiPath.startsWith("/mute-keywords")
-  ) {
-    e.respondWith(networkFirst(e.request, SHELL_CACHE));
-    return;
-  }
 });
 
 self.addEventListener("push", (e) => {
@@ -71,33 +33,3 @@ self.addEventListener("notificationclick", (e) => {
   const url = e.notification.data?.url;
   if (url) e.waitUntil(clients.openWindow(url));
 });
-
-async function staleWhileRevalidate(request, cacheName, maxEntries) {
-  const cache = await caches.open(cacheName);
-  const cached = await cache.match(request);
-  const network = fetch(request)
-    .then(async (res) => {
-      if (res.ok) {
-        cache.put(request, res.clone());
-        const keys = await cache.keys();
-        while (keys.length > maxEntries) {
-          await cache.delete(keys[0]);
-          keys.shift();
-        }
-      }
-      return res;
-    })
-    .catch(() => cached);
-  return cached ?? (await network);
-}
-
-async function networkFirst(request, cacheName) {
-  const cache = await caches.open(cacheName);
-  try {
-    const res = await fetch(request);
-    if (res.ok) cache.put(request, res.clone());
-    return res;
-  } catch {
-    return (await cache.match(request)) ?? Response.error();
-  }
-}
