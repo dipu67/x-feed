@@ -37,6 +37,10 @@ function makeItem(projectId: string, text: string): FeedItem {
 beforeAll(async () => {
   sendNotification.mockReset();
   sendNotification.mockResolvedValue({});
+  // Hermetic: remove leftovers from any earlier crashed run first.
+  await prisma.pushSubscription.deleteMany({
+    where: { endpoint: { startsWith: "https://push.test/" } },
+  });
   const u = await prisma.user.create({
     data: {
       email: `push-${Date.now()}@t.local`,
@@ -95,6 +99,15 @@ afterAll(async () => {
 });
 
 describe("PushDispatcher.dispatchToAllSubscribers", () => {
+  // The dispatcher broadcasts to EVERY subscription row in the DB — the dev
+  // database holds real device subscriptions alongside the fixtures, so
+  // assertions must count calls per fixture endpoint, never globally.
+  function callsFor(endpointPrefix: string): number {
+    return sendNotification.mock.calls.filter(
+      (c) => (c[0] as { endpoint: string }).endpoint.startsWith(endpointPrefix),
+    ).length;
+  }
+
   it("sends every tweet to every subscriber, follow or not", async () => {
     sendNotification.mockClear();
     sendNotification.mockResolvedValue({});
@@ -102,13 +115,9 @@ describe("PushDispatcher.dispatchToAllSubscribers", () => {
     // No userFollow rows exist — the broadcast must not care.
     await d.dispatchToAllSubscribers(makeItem(projectId, "hello world"));
 
-    const endpoints = sendNotification.mock.calls.map(
-      (call) => (call[0] as { endpoint: string }).endpoint,
-    );
-    expect(endpoints.length).toBe(3);
-    expect(endpoints.some((e) => e.startsWith("https://push.test/owned-"))).toBe(true);
-    expect(endpoints.some((e) => e.startsWith("https://push.test/muted-"))).toBe(true);
-    expect(endpoints.some((e) => e.startsWith("https://push.test/anon-"))).toBe(true);
+    expect(callsFor("https://push.test/owned-")).toBe(1);
+    expect(callsFor("https://push.test/muted-")).toBe(1);
+    expect(callsFor("https://push.test/anon-")).toBe(1);
   });
 
   it("honors a logged-in user's mute keyword for their own devices", async () => {
@@ -119,25 +128,30 @@ describe("PushDispatcher.dispatchToAllSubscribers", () => {
       makeItem(projectId, "skipme — this one is muted"),
     );
 
-    const endpoints = sendNotification.mock.calls.map(
-      (call) => (call[0] as { endpoint: string }).endpoint,
-    );
-    expect(endpoints.length).toBe(2);
-    expect(endpoints.some((e) => e.startsWith("https://push.test/muted-"))).toBe(false);
-    expect(endpoints.some((e) => e.startsWith("https://push.test/owned-"))).toBe(true);
-    expect(endpoints.some((e) => e.startsWith("https://push.test/anon-"))).toBe(true);
+    expect(callsFor("https://push.test/muted-")).toBe(0);
+    expect(callsFor("https://push.test/owned-")).toBe(1);
+    expect(callsFor("https://push.test/anon-")).toBe(1);
   });
 
   it("prunes dead subscriptions on 404", async () => {
+    const deadEndpoint = `https://push.test/dead-${Date.now()}`;
+    await prisma.pushSubscription.create({
+      data: { endpoint: deadEndpoint, p256dh: "k1", auth: "k2", userId: null },
+    });
     sendNotification.mockClear();
-    sendNotification.mockRejectedValueOnce({ statusCode: 404 });
+    sendNotification.mockImplementation((opts: unknown) => {
+      const endpoint = (opts as { endpoint: string }).endpoint;
+      return endpoint.startsWith("https://push.test/dead-")
+        ? Promise.reject({ statusCode: 404 })
+        : Promise.resolve({});
+    });
     const d = new PushDispatcher({ concurrency: 8 });
     await d.dispatchToAllSubscribers(makeItem(projectId, "x"));
-    // One send attempted per subscription; the 404 endpoint is removed.
-    expect(sendNotification).toHaveBeenCalledTimes(3);
-    const remaining = await prisma.pushSubscription.count({
-      where: { endpoint: { startsWith: "https://push.test/" } },
+
+    expect(callsFor("https://push.test/dead-")).toBe(1);
+    const remaining = await prisma.pushSubscription.findUnique({
+      where: { endpoint: deadEndpoint },
     });
-    expect(remaining).toBe(2);
+    expect(remaining).toBeNull();
   });
 });
