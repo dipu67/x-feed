@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../db/prisma.js";
 import { requireUser } from "../auth/middleware.js";
+import { Prisma } from "../generated/prisma/client.js";
 
 export const growthRouter = Router();
 
@@ -66,18 +67,6 @@ growthRouter.get("/", async (req, res) => {
       where: filterUserId ? { userId: filterUserId } : {},
       orderBy: { userId: "asc" },
       include: {
-        // For a finite window, use the most recent value known at its start.
-        // "All" uses the earliest recorded baseline for the project.
-        snapshots: since
-          ? {
-              where: { capturedAt: { lte: since } },
-              orderBy: [{ capturedAt: "desc" }, { id: "desc" }],
-              take: 1,
-            }
-          : {
-              orderBy: [{ capturedAt: "asc" }, { id: "asc" }],
-              take: 1,
-            },
         // Relation-local limit guarantees one latest tweet per project. A
         // global `take: projects.length` can omit quieter projects entirely.
         feedItems: {
@@ -104,6 +93,45 @@ growthRouter.get("/", async (req, res) => {
         users: [],
       });
       return;
+    }
+
+    // One DISTINCT ON query replaces N per-project snapshot subqueries:
+    // finite windows read the newest hourly bucket at-or-before the window
+    // start; "all" reads the earliest daily bucket.
+    const baselineByUser = new Map<
+      string,
+      { followers: number; following: number; tweets: number }
+    >();
+    if (projects.length > 0) {
+      const ids = projects.map((p) => p.userId);
+      const granularity = since ? "hour" : "day";
+      const order = since ? Prisma.raw("DESC") : Prisma.raw("ASC");
+      const bucketCond = since
+        ? Prisma.sql`AND r.bucket_start <= ${since}`
+        : Prisma.empty;
+      const rows = await prisma.$queryRaw<
+        Array<{
+          project_id: string;
+          followers: number;
+          following: number;
+          tweets: number;
+        }>
+      >(Prisma.sql`
+        SELECT DISTINCT ON (r.project_id)
+          r.project_id, r.followers, r.following, r.tweets
+        FROM project_metric_rollups r
+        WHERE r.granularity = ${granularity}
+          AND r.project_id IN (${Prisma.join(ids)})
+          ${bucketCond}
+        ORDER BY r.project_id, r.bucket_start ${order}
+      `);
+      for (const row of rows) {
+        baselineByUser.set(row.project_id, {
+          followers: row.followers,
+          following: row.following,
+          tweets: row.tweets,
+        });
+      }
     }
 
     // Single query: every ProjectChange inside the window, bucketed per
@@ -149,7 +177,7 @@ growthRouter.get("/", async (req, res) => {
 
     const users = projects.map((project) => {
       const userChanges = changesByUser.get(project.userId) ?? [];
-      const deltas = metricDeltas(project, project.snapshots[0]);
+      const deltas = metricDeltas(project, baselineByUser.get(project.userId));
 
       const formattedChanges = userChanges.map((c) => ({
         field: c.field,

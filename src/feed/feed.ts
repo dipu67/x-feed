@@ -250,8 +250,8 @@ async function runCycle(io: FeedSocket): Promise<void> {
       }
 
       // Persist metrics + profile fields via the tracking service: it writes
-      // a ProjectChange row only when something actually moved and snapshots
-      // on movement. Reset missedChecks (the user is visible to X).
+      // rollups every cycle and records profile/status changes per event.
+      // Reset missedChecks (the user is visible to X).
       const trackingInput = toTrackingInput(project, user);
       const { changes, statusChanged } = await applyUserPresence(
         trackingInput,
