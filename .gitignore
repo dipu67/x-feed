@@ -152,4 +152,5 @@ vite.config.ts.timestamp-*
 // claude
 .claude/settings.json
 docs/
-.superpowers
+.superpowers 
+.zcodeignore
