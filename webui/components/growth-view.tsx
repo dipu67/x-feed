@@ -11,6 +11,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
+import { TrendChart } from "@/components/trend-chart";
 import { toast } from "sonner";
 
 import {
@@ -60,10 +61,13 @@ import {
 
 import {
   fetchGrowth,
+  fetchTrend,
   type GrowthChange,
   type GrowthRange,
   type GrowthResponse,
   type GrowthUser,
+  type TrendPoint,
+  type TrendRange,
 } from "@/lib/api";
 import { formatCount, formatRelativeTime } from "@/lib/format";
 
@@ -748,6 +752,8 @@ function GrowthDetailDialog({
                 </ul>
               )}
             </div>
+
+            <TrendSection userId={detail.user.userId} />
           </>
         ) : null}
       </DialogContent>
@@ -776,6 +782,63 @@ function DetailMetric({
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="text-xl font-semibold tabular-nums">{formatCount(value)}</p>
       <Delta value={delta} />
+    </div>
+  );
+}
+
+function TrendSection({ userId }: { userId: string }) {
+  const [range, setRange] = useState<TrendRange>("24h");
+  const [points, setPoints] = useState<TrendPoint[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPoints(null);
+    setError(null);
+    fetchTrend(userId, range)
+      .then((data) => {
+        if (!cancelled) setPoints(data.points);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load trend");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, range]);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold">Trend</h3>
+        <Tabs
+          value={range}
+          onValueChange={(v: string) => setRange(v as TrendRange)}
+        >
+          <TabsList className="h-7">
+            <TabsTrigger value="24h" className="text-xs">
+              24h
+            </TabsTrigger>
+            <TabsTrigger value="7d" className="text-xs">
+              7d
+            </TabsTrigger>
+            <TabsTrigger value="30d" className="text-xs">
+              30d
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+      {error ? (
+        <p className="text-sm text-destructive">{error}</p>
+      ) : points === null ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">
+          Loading…
+        </p>
+      ) : (
+        <TrendChart points={points} />
+      )}
     </div>
   );
 }

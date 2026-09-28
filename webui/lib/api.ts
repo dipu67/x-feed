@@ -340,6 +340,26 @@ export async function fetchGrowth(params: {
   return request<GrowthResponse>(`/growth?${q.toString()}`);
 }
 
+export type TrendRange = "24h" | "7d" | "30d";
+
+export type TrendPoint = {
+  t: string;
+  followers: number;
+  following: number;
+  tweets: number;
+};
+
+export type TrendResponse = {
+  userId: string;
+  range: TrendRange;
+  points: TrendPoint[];
+};
+
+export function fetchTrend(userId: string, range: TrendRange) {
+  const q = new URLSearchParams({ userId, range });
+  return request<TrendResponse>(`/growth/trend?${q.toString()}`);
+}
+
 // ── Admin (x-admin-token gated) ───────────────────────────────────────────
 
 export type Invite = {
