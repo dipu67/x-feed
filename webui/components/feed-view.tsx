@@ -83,8 +83,11 @@ export function FeedView() {
   useEffect(() => {
     const socket = getSocket();
     socketRef.current = socket;
+    // The singleton may already be connected when this page mounts — the
+    // "connect" event won't fire again, so seed the badge from live state.
+    setConnected(socket.connected);
 
-    socket.on("connect", () => {
+    const onConnect = () => {
       setConnected(true);
       // After a reconnect, re-fetch to catch any items missed while offline.
       fetchFeed({ limit: 80, filter: filterRef.current })
@@ -98,9 +101,9 @@ export function FeedView() {
           });
         })
         .catch(() => {});
-    });
-    socket.on("disconnect", () => setConnected(false));
-    socket.on("feed:new", (item: FeedItem) => {
+    };
+    const onDisconnect = () => setConnected(false);
+    const onFeedNew = (item: FeedItem) => {
       // The poller re-emits items it re-upserts, so drop repeats before they
       // reach the list or fire a notification.
       if (seenRef.current.has(item.id)) return;
@@ -120,9 +123,16 @@ export function FeedView() {
           return next;
         });
       }, 4000);
-    });
+    };
+    socket.on("connect", onConnect);
+    socket.on("disconnect", onDisconnect);
+    socket.on("feed:new", onFeedNew);
+    // The socket is a session-wide singleton (see getSocket) — detach only
+    // this page's listeners, never disconnect the shared instance.
     return () => {
-      socket.disconnect();
+      socket.off("connect", onConnect);
+      socket.off("disconnect", onDisconnect);
+      socket.off("feed:new", onFeedNew);
     };
   }, []);
 

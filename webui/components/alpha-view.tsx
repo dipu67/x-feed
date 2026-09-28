@@ -58,8 +58,11 @@ export function AlphaView() {
     // rooms on the handshake, so live matches require being logged in.
     const socket = getSocket();
     socketRef.current = socket;
+    // The singleton may already be connected when this page mounts — the
+    // "connect" event won't fire again, so seed the badge from live state.
+    setConnected(socket.connected);
 
-    socket.on("connect", () => {
+    const onConnect = () => {
       setConnected(true);
       // After a reconnect, re-fetch to catch matched items missed offline.
       fetchFeed({ matched: true })
@@ -73,9 +76,9 @@ export function AlphaView() {
           });
         })
         .catch(() => {});
-    });
-    socket.on("disconnect", () => setConnected(false));
-    socket.on("feed:new", (item: FeedItem) => {
+    };
+    const onDisconnect = () => setConnected(false);
+    const onFeedNew = (item: FeedItem) => {
       // Non-matching items must never enter the alpha list.
       if (!item.matchedKeywords || item.matchedKeywords.length === 0) return;
       if (seenRef.current.has(item.id)) return;
@@ -94,9 +97,16 @@ export function AlphaView() {
           return next;
         });
       }, 4000);
-    });
+    };
+    socket.on("connect", onConnect);
+    socket.on("disconnect", onDisconnect);
+    socket.on("feed:new", onFeedNew);
+    // The socket is a session-wide singleton (see getSocket) — detach only
+    // this page's listeners, never disconnect the shared instance.
     return () => {
-      socket.disconnect();
+      socket.off("connect", onConnect);
+      socket.off("disconnect", onDisconnect);
+      socket.off("feed:new", onFeedNew);
     };
   }, []);
 
