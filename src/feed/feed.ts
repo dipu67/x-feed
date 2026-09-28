@@ -4,6 +4,7 @@ import { fetchProfileStatusesPage } from "../fxTwitter/statuses.js";
 import type { APITwitterStatus } from "../fxTwitter/types.js";
 import { Prisma } from "../generated/prisma/client.js";
 import { chunk } from "../lib/chunk.js";
+import { ROLLUP_RETENTION_MS } from "../lib/bucket.js";
 import {
   compileKeywordMatcher,
   type KeywordMatcher,
@@ -40,6 +41,20 @@ function getDispatcher(io: FeedSocket): PushDispatcher {
 
 const BATCH_SIZE = 100;
 const CYCLE_MS =  60 * 1000; // every 60s
+
+let lastRollupPruneDay: string | null = null;
+
+/** Delete hourly rollup buckets older than the retention window. Runs the
+ * actual delete at most once per UTC day; every other cycle is a no-op. */
+export async function pruneRollupsDaily(now: Date = new Date()): Promise<void> {
+  const today = now.toISOString().slice(0, 10);
+  if (lastRollupPruneDay === today) return;
+  lastRollupPruneDay = today;
+  const cutoff = new Date(now.getTime() - ROLLUP_RETENTION_MS);
+  await prisma.projectMetricRollup.deleteMany({
+    where: { granularity: "hour", bucketStart: { lt: cutoff } },
+  });
+}
 
 type FeedSocket = SocketServer;
 
@@ -174,6 +189,7 @@ async function persistAndEmit(
 }
 
 async function runCycle(io: FeedSocket): Promise<void> {
+  await pruneRollupsDaily();
   const projects = await prisma.project.findMany();
   if (projects.length === 0) {
     console.log("[feed] no projects yet");

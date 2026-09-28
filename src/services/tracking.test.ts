@@ -1,6 +1,7 @@
 import { afterAll, describe, it, expect } from "vitest";
 import { prisma } from "../db/prisma.js";
 import { applyUserPresence, type ProjectSnapshotInput } from "./tracking.js";
+import { pruneRollupsDaily } from "../feed/feed.js";
 import type { UserData } from "../TwitterClient/types.js";
 
 const projectId = `rollup-test-${Date.now()}`;
@@ -77,5 +78,52 @@ describe("applyUserPresence rollup writes", () => {
       where: { projectId },
     });
     expect(snaps).toBe(0);
+  });
+});
+
+describe("pruneRollupsDaily", () => {
+  it("deletes only hourly buckets older than 30 days", async () => {
+    const now = Date.now();
+    const DAY = 24 * 60 * 60 * 1000;
+    await prisma.projectMetricRollup.create({
+      data: {
+        projectId,
+        granularity: "hour",
+        bucketStart: new Date(now - 40 * DAY),
+        followers: 1,
+        following: 1,
+        tweets: 1,
+      },
+    });
+    await prisma.projectMetricRollup.create({
+      data: {
+        projectId,
+        granularity: "day",
+        bucketStart: new Date(now - 40 * DAY),
+        followers: 1,
+        following: 1,
+        tweets: 1,
+      },
+    });
+
+    await pruneRollupsDaily(new Date(now));
+
+    const hourly = await prisma.projectMetricRollup.findMany({
+      where: { projectId, granularity: "hour" },
+    });
+    expect(hourly.length).toBe(1); // the 40d-old hourly row is gone
+    expect(
+      hourly.every(
+        (r) => r.bucketStart.getTime() > now - 30 * DAY,
+      ),
+    ).toBe(true);
+    const daily = await prisma.projectMetricRollup.count({
+      where: { projectId, granularity: "day" },
+    });
+    // The 40d-old daily row from this test + today's daily row from the
+    // Task 3 test (same vitest process, same UTC day).
+    expect(daily).toBe(2);
+    // The 40d-old hourly row was deleted by the sweep above; the remaining
+    // rows are cleaned up by the scoped afterAll deletes.
   });
 });
