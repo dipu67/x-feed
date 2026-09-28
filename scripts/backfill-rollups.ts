@@ -12,41 +12,58 @@ type BucketKey = {
   capturedAt: Date;
 };
 
+type LegacySnapshotRow = {
+  id: bigint;
+  project_id: string;
+  followers: number;
+  following: number;
+  tweets: number;
+  captured_at: Date;
+};
+
+const PAGE_SIZE = 1000;
+
 async function main() {
   const buckets = new Map<string, BucketKey>();
-  let cursor: bigint | undefined;
+  let cursor = BigInt(0);
+  // Raw SQL on purpose: the ProjectSnapshot model is gone from the generated
+  // client, but the backfill must run from deployed code while the legacy
+  // table still exists (deploy -> backfill -> migrate deploy drops it).
   for (;;) {
-    const rows = await prisma.projectSnapshot.findMany({
-      take: 1000,
-      ...(cursor === undefined ? {} : { skip: 1, cursor: { id: cursor } }),
-      orderBy: { id: "asc" },
-    });
+    const rows = await prisma.$queryRaw<LegacySnapshotRow[]>`
+      SELECT id, project_id, followers, following, tweets, captured_at
+      FROM project_snapshots
+      WHERE id > ${cursor}
+      ORDER BY id ASC
+      LIMIT ${PAGE_SIZE}
+    `;
     if (rows.length === 0) break;
     for (const row of rows) {
+      const id = BigInt(row.id);
+      const capturedAt = new Date(row.captured_at);
       const pairs = [
-        ["hour", hourBucketStart(row.capturedAt)],
-        ["day", dayBucketStart(row.capturedAt)],
+        ["hour", hourBucketStart(capturedAt)],
+        ["day", dayBucketStart(capturedAt)],
       ] as const;
       for (const [granularity, bucketStart] of pairs) {
-        const key = `${row.projectId}:${granularity}:${bucketStart.toISOString()}`;
+        const key = `${row.project_id}:${granularity}:${bucketStart.toISOString()}`;
         const existing = buckets.get(key);
         // Later capturedAt wins: the bucket holds the last observation.
-        if (!existing || row.capturedAt >= existing.capturedAt) {
+        if (!existing || capturedAt >= existing.capturedAt) {
           buckets.set(key, {
-            projectId: row.projectId,
+            projectId: row.project_id,
             granularity,
             bucketStart,
             followers: row.followers,
             following: row.following,
             tweets: row.tweets,
-            capturedAt: row.capturedAt,
+            capturedAt,
           });
         }
       }
+      cursor = id;
     }
-    const last = rows[rows.length - 1];
-    if (!last) break;
-    cursor = last.id;
+    if (rows.length < PAGE_SIZE) break;
     console.log(`[backfill-rollups] scanned ${rows.length} rows…`);
   }
 
