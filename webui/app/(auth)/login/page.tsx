@@ -51,15 +51,15 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-4">
-      <Card>
+    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-4">
+      <Card className="py-8">
         <CardHeader className="items-center text-center">
-          <div className="mb-1 flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+          <div className="mb-2 flex size-14 items-center justify-center rounded-xl bg-primary text-primary-foreground">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 24 24"
               fill="currentColor"
-              className="size-5"
+              className="size-7"
               aria-hidden
             >
               <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />

@@ -1,15 +1,7 @@
 import type { Metadata, Viewport } from "next";
 
-import { AppSidebar } from "@/components/app-sidebar";
 import { Providers } from "@/components/providers";
-import { Separator } from "@/components/ui/separator";
-import {
-  SidebarInset,
-  SidebarProvider,
-  SidebarTrigger,
-} from "@/components/ui/sidebar";
 import "./globals.css";
-
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -32,6 +24,8 @@ export const metadata: Metadata = {
   },
 };
 
+// The sidebar shell lives in app/(app)/layout.tsx so pre-auth pages
+// (login, invite) render standalone.
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
@@ -40,19 +34,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       suppressHydrationWarning
     >
       <body className="min-h-full">
-        <Providers>
-          <SidebarProvider>
-            <AppSidebar />
-            <SidebarInset>
-              <header className="flex h-12 shrink-0 items-center gap-2 border-b px-3">
-                <SidebarTrigger />
-                <Separator orientation="vertical" className="h-4" />
-                <span className="text-sm text-muted-foreground">x-feed</span>
-              </header>
-              <div className="flex min-h-0 flex-1 flex-col">{children}</div>
-            </SidebarInset>
-          </SidebarProvider>
-        </Providers>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
