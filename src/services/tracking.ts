@@ -1,4 +1,5 @@
 import { prisma } from "../db/prisma.js";
+import { dayBucketStart, hourBucketStart } from "../lib/bucket.js";
 import type { UserData } from "../TwitterClient/types.js";
 
 export type ProjectStatus = "active" | "suspended" | "unavailable" | "not_found";
@@ -116,8 +117,8 @@ export type PresenceResult = {
  *   - emit a ProjectChange row for each field that moved (metric rows are
  *     coalesced inside a 10-min window so an account gaining 100s of
  *     followers per hour doesn't blow up the table)
- *   - write a ProjectSnapshot only when a metric or status moved (so idle
- *     accounts don't bloat the table)
+ *   - upsert the current hour/day ProjectMetricRollup buckets every cycle
+ *     (a jittering counter updates the bucket instead of creating rows)
  *   - reset missedChecks (the user is visible to X)
  */
 export async function applyUserPresence(
@@ -156,20 +157,34 @@ export async function applyUserPresence(
     },
   });
 
-  // Snapshot when a metric actually moved or status flipped. Sparse writes
-  // keep the table small for idle accounts while still giving the growth
-  // route a reference value at any window start.
-  const metricMoved = metricChanges.length > 0;
-  if (metricMoved || statusChanged) {
-    await prisma.projectSnapshot.create({
-      data: {
-        projectId: project.userId,
-        followers: user.followersCount ?? project.followers,
-        following: user.followingCount ?? project.following,
-        tweets: user.tweetCount ?? project.tweets,
-        status: statusChanged ? nextStatus : project.status,
-        capturedAt: now,
+  // Bucketed rollups replace per-movement snapshots (see
+  // docs/superpowers/specs/2026-09-28-metric-rollups-design.md): a jittering
+  // counter updates the current hour/day bucket instead of creating rows.
+  const followers = user.followersCount ?? project.followers;
+  const following = user.followingCount ?? project.following;
+  const tweets = user.tweetCount ?? project.tweets;
+  const rollups = [
+    { granularity: "hour", bucketStart: hourBucketStart(now) },
+    { granularity: "day", bucketStart: dayBucketStart(now) },
+  ] as const;
+  for (const rollup of rollups) {
+    await prisma.projectMetricRollup.upsert({
+      where: {
+        projectId_granularity_bucketStart: {
+          projectId: project.userId,
+          granularity: rollup.granularity,
+          bucketStart: rollup.bucketStart,
+        },
       },
+      create: {
+        projectId: project.userId,
+        granularity: rollup.granularity,
+        bucketStart: rollup.bucketStart,
+        followers,
+        following,
+        tweets,
+      },
+      update: { followers, following, tweets },
     });
   }
 
@@ -334,17 +349,6 @@ export async function applyUserAbsence(
         oldValue: project.status,
         newValue: newStatus,
         changedAt: now,
-      },
-    });
-
-    await prisma.projectSnapshot.create({
-      data: {
-        projectId: project.userId,
-        followers: project.followers,
-        following: project.following,
-        tweets: project.tweets,
-        status: newStatus,
-        capturedAt: now,
       },
     });
   }

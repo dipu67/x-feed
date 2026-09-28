@@ -184,35 +184,6 @@ async function runCycle(io: FeedSocket): Promise<void> {
   const keywords = await prisma.keyword.findMany({ where: { enabled: true } });
   const matcher = compileKeywordMatcher(keywords);
 
-  // Seed baseline snapshots for any project that has none yet, so the growth
-  // route has a reference value for any "all" / wide window. This is a
-  // one-shot per project for the lifetime of the DB.
-  const withoutSnapshot = await prisma.project.findMany({
-    where: { snapshots: { none: {} } },
-    select: {
-      userId: true,
-      followers: true,
-      following: true,
-      tweets: true,
-      status: true,
-    },
-  });
-  if (withoutSnapshot.length > 0) {
-    await prisma.projectSnapshot.createMany({
-      data: withoutSnapshot.map((p) => ({
-        projectId: p.userId,
-        followers: p.followers,
-        following: p.following,
-        tweets: p.tweets,
-        status: p.status,
-        capturedAt: new Date(),
-      })),
-    });
-    console.log(
-      `[feed] seeded ${withoutSnapshot.length} baseline snapshot(s)`,
-    );
-  }
-
   const byUserId = new Map(projects.map((project) => [project.userId, project]));
   const { client, accountId } = await getTwitterClient();
   const readBreaker = readBreakerFor(accountId);
