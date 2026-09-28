@@ -246,10 +246,13 @@ function InvitesPanel({ currentUserId }: { currentUserId: string }) {
     }
   }
 
-  function copyToken() {
+  function copyLink() {
     if (!created) return;
+    // Copy the full invite URL the dialog displays, not the bare token —
+    // the recipient needs a clickable link.
+    const inviteLink = `${window.location.origin}/invite/${created.token}`;
     void navigator.clipboard
-      .writeText(created.token)
+      .writeText(inviteLink)
       .then(() => {
         setCopied(true);
         window.setTimeout(() => setCopied(false), 2000);
@@ -310,7 +313,7 @@ function InvitesPanel({ currentUserId }: { currentUserId: string }) {
                 <code className="min-w-0 flex-1 truncate rounded bg-background px-2 py-1.5 text-xs">
                   {inviteLink}
                 </code>
-                <Button variant="outline" size="sm" onClick={copyToken}>
+                <Button variant="outline" size="sm" onClick={copyLink}>
                   {copied ? (
                     <Check data-icon="inline-start" className="size-4" />
                   ) : (

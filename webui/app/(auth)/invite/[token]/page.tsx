@@ -63,14 +63,14 @@ export default function AcceptInvitePage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password (12+ characters)</Label>
+              <Label htmlFor="password">Password (8+ characters)</Label>
               <Input
                 id="password"
                 type="password"
                 autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                minLength={12}
+                minLength={8}
                 required
               />
             </div>

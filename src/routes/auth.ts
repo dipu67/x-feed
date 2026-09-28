@@ -59,8 +59,8 @@ authRouter.post("/accept-invite", async (req, res) => {
     res.status(400).json({ error: "token and password required" });
     return;
   }
-  if (password.length < 12) {
-    res.status(400).json({ error: "password must be at least 12 characters" });
+  if (password.length < 8) {
+    res.status(400).json({ error: "password must be at least 8 characters" });
     return;
   }
   const invite = await prisma.userInvite.findUnique({
