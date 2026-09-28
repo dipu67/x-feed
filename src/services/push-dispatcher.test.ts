@@ -63,6 +63,8 @@ describe("PushDispatcher.dispatchToFollowers (Review Focus #4)", () => {
       reposts: 0,
       replies: 0,
       payload: {},
+      matchedKeywords: null,
+      matchedCount: 0,
       detectedAt: new Date(),
     });
     expect(sendNotification).toHaveBeenCalledTimes(1);
@@ -83,6 +85,8 @@ describe("PushDispatcher.dispatchToFollowers (Review Focus #4)", () => {
       reposts: 0,
       replies: 0,
       payload: {},
+      matchedKeywords: null,
+      matchedCount: 0,
       detectedAt: new Date(),
     });
     const count = await prisma.pushSubscription.count({ where: { userId } });
@@ -123,6 +127,8 @@ describe("PushDispatcher.dispatchToFollowers (Review Focus #4)", () => {
       reposts: 0,
       replies: 0,
       payload: {},
+      matchedKeywords: null,
+      matchedCount: 0,
       detectedAt: new Date(),
     });
     const elapsed = Date.now() - t0;
@@ -183,6 +189,8 @@ describe("PushDispatcher.dispatchToFollowers (Review Focus #4)", () => {
       reposts: 0,
       replies: 0,
       payload: {},
+      matchedKeywords: null,
+      matchedCount: 0,
       detectedAt: new Date(),
     });
 

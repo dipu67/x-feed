@@ -10,8 +10,10 @@ import {
   Rss,
   Settings2,
   ShieldCheck,
+  Tags,
   TrendingUp,
   Webhook,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -38,6 +40,7 @@ const groups = [
     label: "App",
     items: [
       { title: "Feed", href: "/", icon: Rss },
+      { title: "Alpha", href: "/alpha", icon: Zap },
       { title: "Projects", href: "/projects", icon: FolderKanban },
       { title: "Growth", href: "/growth", icon: TrendingUp },
     ],
@@ -46,6 +49,7 @@ const groups = [
     label: "Manage",
     items: [
       { title: "Filters", href: "/settings/filters", icon: Settings2 },
+      { title: "Keywords", href: "/keywords", icon: Tags },
       { title: "Auth tokens", href: "/auth-tokens", icon: KeyRound },
       { title: "Webhook", href: "/webhooks", icon: Webhook },
       { title: "Admin", href: "/admin", icon: ShieldCheck },

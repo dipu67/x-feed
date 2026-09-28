@@ -157,6 +157,26 @@ export type WebhookInfo = {
   example: Record<string, string>;
 };
 
+export type MatchedKeyword = {
+  phrase: string;
+  tag: string | null;
+};
+
+export type Keyword = {
+  id: string;
+  phrase: string;
+  tag: string | null;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type KeywordInput = {
+  phrase?: string;
+  tag?: string | null;
+  enabled?: boolean;
+};
+
 export type FeedItem = {
   id: string;
   projectId: string;
@@ -169,6 +189,7 @@ export type FeedItem = {
   replies: number;
   payload: FeedPayload | null;
   detectedAt: string;
+  matchedKeywords: MatchedKeyword[] | null;
   project: {
     userId: string;
     name: string;

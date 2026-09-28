@@ -29,6 +29,7 @@ import {
   resolveAuthor,
   statusUrl,
 } from "@/lib/x";
+import Image from "next/image";
 
 function initials(name: string) {
   return name.slice(0, 2).toUpperCase();
@@ -37,8 +38,54 @@ function initials(name: string) {
 const URL_PATTERN = /https?:\/\/[^\s<]+/gi;
 const TRAILING_URL_PUNCTUATION = /[),.!?:;\]}]+$/;
 
-/** Render HTTP(S) URLs from tweet text as external links without parsing HTML. */
-function LinkifiedText({ text }: { text: string }) {
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Highlight configured keyword phrases inside a plain (non-URL) segment. */
+function HighlightMatches({
+  text,
+  phrases,
+}: {
+  text: string;
+  phrases: string[];
+}) {
+  if (text === "" || phrases.length === 0) return <>{text}</>;
+  // Longest-first so "mint live" wins over "mint" at the same position.
+  const ordered = [...phrases].sort((a, b) => b.length - a.length);
+  const pattern = new RegExp(
+    `(?<![\\p{L}\\p{N}])(${ordered.map(escapeRegExp).join("|")})(?![\\p{L}\\p{N}])`,
+    "giu",
+  );
+  const parts = text.split(pattern);
+  const lowered = phrases.map((phrase) => phrase.toLowerCase());
+  return (
+    <>
+      {parts.map((part, index) =>
+        lowered.includes(part.toLowerCase()) ? (
+          <mark
+            key={index}
+            className="rounded-sm bg-amber-500/20 text-inherit dark:bg-amber-400/25"
+          >
+            {part}
+          </mark>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
+}
+
+/** Render HTTP(S) URLs from tweet text as external links, highlighting
+ * configured keyword phrases in the plain segments. */
+function LinkifiedText({
+  text,
+  highlights = [],
+}: {
+  text: string;
+  highlights?: string[];
+}) {
   const parts: ReactNode[] = [];
   let cursor = 0;
 
@@ -48,7 +95,8 @@ function LinkifiedText({ text }: { text: string }) {
     const url = rawUrl.replace(TRAILING_URL_PUNCTUATION, "");
     const trailing = rawUrl.slice(url.length);
 
-    if (start > cursor) parts.push(text.slice(cursor, start));
+    if (start > cursor)
+      parts.push(<HighlightMatches key={`t-${start}`} text={text.slice(cursor, start)} phrases={highlights} />);
     if (url) {
       parts.push(
         <a
@@ -66,7 +114,8 @@ function LinkifiedText({ text }: { text: string }) {
     cursor = start + rawUrl.length;
   }
 
-  if (cursor < text.length) parts.push(text.slice(cursor));
+  if (cursor < text.length)
+    parts.push(<HighlightMatches key={`t-end`} text={text.slice(cursor)} phrases={highlights} />);
   return <>{parts}</>;
 }
 
@@ -95,11 +144,13 @@ function Media({
         )}
       >
         {photos.slice(0, 4).map((photo) => (
-          <img
+          <Image
             key={photo.url}
             src={photo.url}
             alt={photo.altText ?? ""}
             className="max-h-80 w-full object-cover"
+            width={photo.width}
+            height={photo.height}
           />
         ))}
       </div>
@@ -136,11 +187,13 @@ function QuoteMedia({ media }: { media: FeedMedia | undefined }) {
         )}
       >
         {photos.slice(0, 4).map((photo) => (
-          <img
+          <Image
             key={photo.url}
             src={photo.url}
             alt={photo.altText ?? ""}
             className="max-h-56 w-full object-cover"
+            width={photo.width}
+            height={photo.height}
           />
         ))}
       </div>
@@ -151,10 +204,12 @@ function QuoteMedia({ media }: { media: FeedMedia | undefined }) {
   return (
     <div className="relative mt-2 overflow-hidden rounded-lg border">
       {video.thumbnail_url ? (
-        <img
+        <Image
           src={video.thumbnail_url}
           alt=""
           className="max-h-56 w-full object-cover"
+          width={video.width}
+          height={video.height}
         />
       ) : (
         <div className="h-32 w-full bg-muted" />
@@ -221,7 +276,7 @@ function QuotedTweet({ quote }: { quote: FeedQuote }) {
         </span>
       </div>
       {quote.text ? (
-        <p className="mt-1 break-words whitespace-pre-wrap text-sm leading-6">
+        <p className="mt-1 wrap-break-word whitespace-pre-wrap text-sm leading-6">
           {quote.text}
         </p>
       ) : null}
@@ -238,7 +293,7 @@ export function FeedItemCard({
   isNew?: boolean;
 }) {
   const payload = item.payload;
-  const author = payload?.author;
+  // const author = payload?.author;
   const repostedBy = payload?.reposted_by;
   const replyingTo = payload?.replying_to;
   const quote = payload?.quote;
@@ -315,6 +370,14 @@ export function FeedItemCard({
                 {KIND_LABEL[kind]}
               </Badge>
             ))}
+            {(item.matchedKeywords ?? []).map((matched) => (
+              <Badge
+                key={matched.phrase}
+                className="border-amber-500/40 bg-amber-500/15 font-normal text-amber-700 dark:text-amber-300"
+              >
+                {matched.tag ?? matched.phrase}
+              </Badge>
+            ))}
             {item.project.chain ? (
               <Badge variant="secondary" className="font-normal">
                 {item.project.chain}
@@ -332,8 +395,13 @@ export function FeedItemCard({
               Replying to @{replyingTo.screen_name}
             </a>
           ) : null}
-          <p className="mt-1 break-words whitespace-pre-wrap text-sm leading-6">
-            <LinkifiedText text={item.text} />
+          <p className="mt-1 wrap-break-word whitespace-pre-wrap text-sm leading-6">
+            <LinkifiedText
+              text={item.text}
+              highlights={(item.matchedKeywords ?? []).map(
+                (matched) => matched.phrase,
+              )}
+            />
           </p>
           <Media media={payload?.media} className="mt-3" />
           {quote ? <QuotedTweet quote={quote} /> : null}

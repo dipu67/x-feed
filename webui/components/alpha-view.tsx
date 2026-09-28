@@ -1,14 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Bell, BellOff, Rss } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Zap } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Switch } from "@/components/ui/switch";
 import {
   Empty,
   EmptyContent,
@@ -19,48 +13,27 @@ import {
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FeedItemCard } from "@/components/feed-item-card";
-import { useTweetNotifications } from "@/hooks/use-tweet-notifications";
-import { useUser } from "@/hooks/useUser";
-import { fetchFeed } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
+import { fetchFeed } from "@/lib/api";
 import type { FeedItem } from "@/lib/types";
 
-export function FeedView() {
+export function AlphaView() {
   const [items, setItems] = useState<FeedItem[]>([]);
   const [newIds, setNewIds] = useState<Set<string>>(new Set());
   const [connected, setConnected] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const notifications = useTweetNotifications();
-  const { user, loading: userLoading } = useUser();
-  // Kept in refs so the socket effect can stay mounted once, without
-  // resubscribing whenever the toggle or the item list changes.
-  const notifyRef = useRef(notifications.notify);
   const seenRef = useRef<Set<string>>(new Set());
   const socketRef = useRef<ReturnType<typeof getSocket> | null>(null);
-  const filterRef = useRef<"mine" | undefined>(undefined);
 
   useEffect(() => {
-    notifyRef.current = notifications.notify;
-  }, [notifications.notify]);
-
-  useEffect(() => {
-    filterRef.current = user ? "mine" : undefined;
-  }, [user]);
-
-  useEffect(() => {
-    // Wait for the auth check so the first fetch already carries the
-    // session — /feed requires a login and the "mine" filter personalizes it.
-    if (userLoading) return;
     let cancelled = false;
-    fetchFeed({ limit: 80, filter: user ? "mine" : undefined })
+    fetchFeed({ matched: true })
       .then((data) => {
         if (cancelled) return;
         const rows = data.items ?? [];
         rows.forEach((row) => seenRef.current.add(row.id));
-        // A socket item can land before this resolves — keep it on top
-        // instead of letting the initial page overwrite it.
         setItems((current) => {
           const fetched = new Set(rows.map((row) => row.id));
           const live = (current ?? []).filter((row) => !fetched.has(row.id));
@@ -78,16 +51,18 @@ export function FeedView() {
     return () => {
       cancelled = true;
     };
-  }, [userLoading, user]);
+  }, []);
 
   useEffect(() => {
+    // Singleton socket shared with the feed view; the server joins per-user
+    // rooms on the handshake, so live matches require being logged in.
     const socket = getSocket();
     socketRef.current = socket;
 
     socket.on("connect", () => {
       setConnected(true);
-      // After a reconnect, re-fetch to catch any items missed while offline.
-      fetchFeed({ limit: 80, filter: filterRef.current })
+      // After a reconnect, re-fetch to catch matched items missed offline.
+      fetchFeed({ matched: true })
         .then((data) => {
           const rows = data.items ?? [];
           rows.forEach((row) => seenRef.current.add(row.id));
@@ -101,8 +76,8 @@ export function FeedView() {
     });
     socket.on("disconnect", () => setConnected(false));
     socket.on("feed:new", (item: FeedItem) => {
-      // The poller re-emits items it re-upserts, so drop repeats before they
-      // reach the list or fire a notification.
+      // Non-matching items must never enter the alpha list.
+      if (!item.matchedKeywords || item.matchedKeywords.length === 0) return;
       if (seenRef.current.has(item.id)) return;
       seenRef.current.add(item.id);
 
@@ -112,7 +87,6 @@ export function FeedView() {
         next.add(item.id);
         return next;
       });
-      notifyRef.current(item);
       window.setTimeout(() => {
         setNewIds((current) => {
           const next = new Set(current);
@@ -140,62 +114,25 @@ export function FeedView() {
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
 
-  const liveLabel = useMemo(
-    () => (connected ? "Live" : "Offline"),
-    [connected],
-  );
-
   return (
     <div className="mx-auto w-full min-w-0 max-w-2xl overflow-x-clip">
       <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-background/80 px-4 py-3 backdrop-blur">
         <div>
-          <h1 className="text-lg font-semibold">Feed</h1>
+          <h1 className="text-lg font-semibold">Alpha</h1>
           <p className="text-sm text-muted-foreground">
-            New tweets from tracked projects
+            Posts matching your keywords
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          {notifications.supported ? (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
-                    {notifications.enabled ? (
-                      <Bell className="size-4" />
-                    ) : (
-                      <BellOff className="size-4" />
-                    )}
-                    <Switch
-                      checked={notifications.enabled}
-                      disabled={notifications.blocked}
-                      onCheckedChange={(checked) => {
-                        void notifications.toggle(checked);
-                      }}
-                      aria-label="Notify me when a new tweet arrives"
-                    />
-                  </label>
-                }
-              />
-              <TooltipContent>
-                {notifications.blocked
-                  ? "Notifications are blocked in your browser settings"
-                  : notifications.enabled
-                    ? "Desktop notification + sound on each new tweet"
-                    : "Turn on desktop notifications and sound"}
-              </TooltipContent>
-            </Tooltip>
-          ) : null}
-          <Badge variant={connected ? "secondary" : "outline"}>
-            <span
-              className={
-                connected
-                  ? "mr-1.5 size-1.5 rounded-full bg-emerald-500"
-                  : "mr-1.5 size-1.5 rounded-full bg-muted-foreground"
-              }
-            />
-            {liveLabel}
-          </Badge>
-        </div>
+        <Badge variant={connected ? "secondary" : "outline"}>
+          <span
+            className={
+              connected
+                ? "mr-1.5 size-1.5 rounded-full bg-emerald-500"
+                : "mr-1.5 size-1.5 rounded-full bg-muted-foreground"
+            }
+          />
+          {connected ? "Live" : "Offline"}
+        </Badge>
       </div>
 
       {loading ? (
@@ -216,15 +153,15 @@ export function FeedView() {
         <Empty className="border-0">
           <EmptyHeader>
             <EmptyMedia variant="icon">
-              <Rss />
+              <Zap />
             </EmptyMedia>
-            <EmptyTitle>No posts yet</EmptyTitle>
+            <EmptyTitle>No matches yet</EmptyTitle>
             <EmptyDescription>
-              Add a project, then wait for the poller to detect a new tweet.
+              Add keywords and matching posts will collect here.
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
-            New items appear here over Socket.IO as soon as they are found.
+            Manage phrases on the Keywords page; matches appear here live.
           </EmptyContent>
         </Empty>
       ) : (

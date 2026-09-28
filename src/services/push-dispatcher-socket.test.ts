@@ -15,6 +15,8 @@ function makeItem(projectId: string, text: string): FeedItem {
     reposts: 0,
     replies: 0,
     payload: { id: "x" },
+    matchedKeywords: null,
+    matchedCount: 0,
     detectedAt: new Date(),
   };
 }

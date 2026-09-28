@@ -297,7 +297,7 @@ function LatestTweetCell({ user }: { user: GrowthUser }) {
       href={tweet.tweetUrl}
       target="_blank"
       rel="noopener noreferrer"
-      className="group flex max-w-[260px] flex-col gap-0.5 text-xs"
+      className="group flex max-w-65 flex-col gap-0.5 text-xs"
     >
       <span className="line-clamp-2 text-foreground group-hover:underline">
         {tweet.text}
@@ -551,7 +551,7 @@ function GrowthTable({
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead className="w-[260px]">Project</TableHead>
+          <TableHead className="w-65">Project</TableHead>
           <TableHead className="text-right">
             <span className="inline-flex items-center gap-1">Followers</span>
           </TableHead>

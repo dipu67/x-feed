@@ -140,6 +140,19 @@ model PushSubscription {
   @@map("push_subscriptions")
 }
 
+/// Operator-managed detection phrases. `phrase` is stored trimmed + lowercase;
+/// matching is case-insensitive with word boundaries (see src/lib/keywords.ts).
+model Keyword {
+  id        BigInt   @id @default(autoincrement())
+  phrase    String   @unique
+  tag       String?
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("keywords")
+}
+
 model FeedItem {
   id         String   @id
   projectId  String   @map("project_id")
@@ -153,10 +166,15 @@ model FeedItem {
   replies    Int      @default(0)
   payload    Json
   detectedAt DateTime @default(now()) @map("detected_at") @db.Timestamptz
+  /// { phrase, tag }[] matched at ingest; DB NULL = never classified,
+  /// JSON null = classified with no matches (see Global Constraints).
+  matchedKeywords Json? @map("matched_keywords")
+  matchedCount    Int   @default(0) @map("matched_count")
 
   @@index([detectedAt(sort: Desc)])
   @@index([projectId])
   @@index([projectId, postedAt(sort: Desc)])
+  @@index([matchedCount, detectedAt(sort: Desc)])
   @@map("feed_items")
 }
 

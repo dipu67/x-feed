@@ -2,9 +2,16 @@ import type { Server as SocketServer } from "socket.io";
 import { prisma } from "../db/prisma.js";
 import { fetchProfileStatusesPage } from "../fxTwitter/statuses.js";
 import type { APITwitterStatus } from "../fxTwitter/types.js";
+import { Prisma } from "../generated/prisma/client.js";
 import { chunk } from "../lib/chunk.js";
+import {
+  compileKeywordMatcher,
+  type KeywordMatcher,
+  type MatchedKeyword,
+} from "../lib/keywords.js";
 import { sleep } from "../lib/sleep.js";
 import { PushDispatcher } from "../services/push-dispatcher.js";
+import { sendTelegramAlert } from "../services/telegram.js";
 import { getTwitterClient } from "../twitter/getClient.js";
 import { CircuitBreaker } from "../twitter/circuit-breaker.js";
 import { withCircuitBreaker } from "./circuit-wrapped-call.js";
@@ -83,10 +90,27 @@ async function persistAndEmit(
     profileImageUrl: string | null;
   },
   statuses: APITwitterStatus[],
+  matcher: KeywordMatcher,
 ) {
   const created = [];
   for (const status of statuses) {
     const data = toFeedPayload(status, project.userId);
+    // Defensive per spec §11: classification must never fail ingestion.
+    let matched: MatchedKeyword[] = [];
+    try {
+      matched = matcher.match(data.text);
+    } catch (error) {
+      console.error("[feed] keyword match failed:", error);
+    }
+    // Both columns are written on create AND update so a tweet edit that
+    // removes the keyword clears stale matches (matchedCount back to 0).
+    const matchData = {
+      matchedKeywords:
+        matched.length > 0
+          ? (matched as unknown as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
+      matchedCount: matched.length,
+    };
     const existing = await prisma.feedItem.findUnique({
       where: { id: data.id },
       select: { id: true },
@@ -100,9 +124,10 @@ async function persistAndEmit(
             reposts: data.reposts,
             replies: data.replies,
             payload: data.payload,
+            ...matchData,
           },
         })
-      : await prisma.feedItem.create({ data });
+      : await prisma.feedItem.create({ data: { ...data, ...matchData } });
 
     // A push is only for a newly detected post. Existing items are refreshed
     // for engagement counts on later cycles and must not notify again.
@@ -121,6 +146,7 @@ async function persistAndEmit(
       replies: item.replies,
       payload: item.payload,
       detectedAt: item.detectedAt.toISOString(),
+      matchedKeywords: matched.length > 0 ? matched : null,
       project: {
         userId: project.userId,
         name: project.name,
@@ -132,6 +158,18 @@ async function persistAndEmit(
     };
     io.emit("feed:new", feedEvent);
     void getDispatcher(io).dispatchToFollowers(item);
+
+    // Keyword matches also alert the operator chat on Telegram. Per-user push
+    // is the dispatcher's job above; this is the global alpha alert.
+    if (matched.length > 0) {
+      const label = matched.map((m) => m.tag ?? m.phrase).join(", ");
+      void sendTelegramAlert({
+        label,
+        username: item.username,
+        text: item.text,
+        url: item.tweetUrl,
+      });
+    }
   }
   return created;
 }
@@ -142,6 +180,10 @@ async function runCycle(io: FeedSocket): Promise<void> {
     console.log("[feed] no projects yet");
     return;
   }
+
+  // One matcher per cycle: fresh keywords without a DB read per tweet.
+  const keywords = await prisma.keyword.findMany({ where: { enabled: true } });
+  const matcher = compileKeywordMatcher(keywords);
 
   // Seed baseline snapshots for any project that has none yet, so the growth
   // route has a reference value for any "all" / wide window. This is a
@@ -251,7 +293,7 @@ async function runCycle(io: FeedSocket): Promise<void> {
           const page = await fetchProfileStatusesPage(user.username, cursorTop);
           cursorTop = page.cursorTop;
           if (page.statuses.length > 0) {
-            await persistAndEmit(io, project, page.statuses);
+            await persistAndEmit(io, project, page.statuses, matcher);
             console.log(
               `[feed] @${user.username} +${page.statuses.length} tweet(s)`,
             );
