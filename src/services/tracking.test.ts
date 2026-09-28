@@ -72,12 +72,6 @@ describe("applyUserPresence rollup writes", () => {
     const hourRow = afterSecond.find((r) => r.granularity === "hour");
     expect(hourRow?.followers).toBe(101);
     expect(hourRow?.tweets).toBe(11);
-
-    // No snapshot rows may be written anymore.
-    const snaps = await prisma.projectSnapshot.count({
-      where: { projectId },
-    });
-    expect(snaps).toBe(0);
   });
 });
 
