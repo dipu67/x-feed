@@ -30,6 +30,8 @@ export function TrendChart({ points }: { points: TrendPoint[] }) {
     const lines = SERIES.map((s) => ({
       ...s,
       d: points.map((p, i) => `${x(i)},${y(p[s.key])}`).join(" "),
+      // Per-point circles so single-point and flat series stay visible.
+      pts: points.map((p, i) => ({ x: x(i), y: y(p[s.key]) })),
     }));
     return {
       lines,
@@ -97,6 +99,17 @@ export function TrendChart({ points }: { points: TrendPoint[] }) {
             strokeLinejoin="round"
           />
         ))}
+        {layout.lines.map((s) =>
+          s.pts.map((pt, i) => (
+            <circle
+              key={`${s.key}-${i}`}
+              cx={pt.x}
+              cy={pt.y}
+              r={3}
+              fill={s.color}
+            />
+          )),
+        )}
         <text x={PAD.left - 6} y={layout.yMax + 4} textAnchor="end" className="fill-current text-[10px] text-muted-foreground">
           {layout.max}
         </text>

@@ -167,26 +167,28 @@ export async function applyUserPresence(
     { granularity: "hour", bucketStart: hourBucketStart(now) },
     { granularity: "day", bucketStart: dayBucketStart(now) },
   ] as const;
-  for (const rollup of rollups) {
-    await prisma.projectMetricRollup.upsert({
-      where: {
-        projectId_granularity_bucketStart: {
+  await Promise.all(
+    rollups.map((rollup) =>
+      prisma.projectMetricRollup.upsert({
+        where: {
+          projectId_granularity_bucketStart: {
+            projectId: project.userId,
+            granularity: rollup.granularity,
+            bucketStart: rollup.bucketStart,
+          },
+        },
+        create: {
           projectId: project.userId,
           granularity: rollup.granularity,
           bucketStart: rollup.bucketStart,
+          followers,
+          following,
+          tweets,
         },
-      },
-      create: {
-        projectId: project.userId,
-        granularity: rollup.granularity,
-        bucketStart: rollup.bucketStart,
-        followers,
-        following,
-        tweets,
-      },
-      update: { followers, following, tweets },
-    });
-  }
+        update: { followers, following, tweets },
+      }),
+    ),
+  );
 
   // Profile field rows are distinct events — append directly.
   // Metric rows are coalesced into the prior row if it's inside the

@@ -36,7 +36,7 @@ function rangeToSince(range: RangeKey): Date | null {
 }
 
 /**
- * Growth is calculated from a stable point-in-time snapshot, not from the
+ * Growth is calculated from a stable point-in-time rollup bucket, not from the
  * change log. Metric change rows are deliberately coalesced by the poller;
  * using their latest timestamp would incorrectly include part of a change
  * that happened before a rolling-window boundary.
