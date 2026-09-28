@@ -163,17 +163,6 @@ export async function createProject(input: ProjectInput) {
       tokenAddress: optionalText(input.tokenAddress) ?? null,
     },
   });
-  // Seed an initial snapshot so the growth route has a reference value.
-  await prisma.projectSnapshot.create({
-    data: {
-      projectId: project.userId,
-      followers: project.followers,
-      following: project.following,
-      tweets: project.tweets,
-      status: project.status,
-      capturedAt: new Date(),
-    },
-  });
   return mapProject(project);
 }
 
@@ -234,25 +223,6 @@ export async function upsertProjectFromWebhook(input: ProjectInput) {
     create: data,
     update,
   });
-
-  // Seed a snapshot if this is a fresh insert (matches the per-cycle seeder
-  // in feed.runCycle, but covers webhook-driven upserts).
-  const hasSnapshot = await prisma.projectSnapshot.findFirst({
-    where: { projectId: project.userId },
-    select: { id: true },
-  });
-  if (!hasSnapshot) {
-    await prisma.projectSnapshot.create({
-      data: {
-        projectId: project.userId,
-        followers: project.followers,
-        following: project.following,
-        tweets: project.tweets,
-        status: project.status,
-        capturedAt: new Date(),
-      },
-    });
-  }
 
   return mapProject(project);
 }
