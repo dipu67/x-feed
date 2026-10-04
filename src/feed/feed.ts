@@ -42,6 +42,10 @@ function getDispatcher(io: FeedSocket): PushDispatcher {
 const BATCH_SIZE = 100;
 const CYCLE_MS =  60 * 1000; // every 60s
 
+/** Maximum feed items stored per project; older posts are pruned when a
+ * newer one is persisted. */
+const FEED_ITEMS_PER_PROJECT = 5;
+
 let lastRollupPruneDay: string | null = null;
 
 /** Delete hourly rollup buckets older than the retention window. Runs the
@@ -54,6 +58,45 @@ export async function pruneRollupsDaily(now: Date = new Date()): Promise<void> {
   await prisma.projectMetricRollup.deleteMany({
     where: { granularity: "hour", bucketStart: { lt: cutoff } },
   });
+}
+
+/** Keep only the newest `keep` feed items for one project, by postedAt.
+ * Items sharing the 10th-newest postedAt are never deleted, so the count can
+ * slightly exceed the cap on identical timestamps. */
+export async function pruneProjectFeedItems(
+  projectId: string,
+  keep: number = FEED_ITEMS_PER_PROJECT,
+): Promise<number> {
+  const cutoff = await prisma.feedItem.findMany({
+    where: { projectId },
+    orderBy: { postedAt: "desc" },
+    skip: keep - 1,
+    take: 1,
+    select: { postedAt: true },
+  });
+  if (cutoff.length === 0 || !cutoff[0]) return 0;
+  const { count } = await prisma.feedItem.deleteMany({
+    where: { projectId, postedAt: { lt: cutoff[0].postedAt } },
+  });
+  return count;
+}
+
+/** Catch-up prune for every project already over the per-project cap, so
+ * pre-existing surplus converges without waiting for new tweets. */
+export async function pruneAllProjectFeedItems(
+  keep: number = FEED_ITEMS_PER_PROJECT,
+): Promise<number> {
+  const groups = await prisma.feedItem.groupBy({
+    by: ["projectId"],
+    _count: { projectId: true },
+  });
+  let deleted = 0;
+  for (const group of groups) {
+    if ((group._count.projectId ?? 0) > keep) {
+      deleted += await pruneProjectFeedItems(group.projectId, keep);
+    }
+  }
+  return deleted;
 }
 
 type FeedSocket = SocketServer;
@@ -183,6 +226,13 @@ async function persistAndEmit(
         text: item.text,
         url: item.tweetUrl,
       });
+    }
+  }
+  if (created.length > 0) {
+    try {
+      await pruneProjectFeedItems(project.userId);
+    } catch (error) {
+      console.error("[feed] feed item prune failed:", error);
     }
   }
   return created;
@@ -344,12 +394,20 @@ function toTrackingInput(
 
 export function startFeedWorker(io: FeedSocket): void {
   let running = false;
+  let pruned = false;
 
   const tick = async () => {
     if (running) return;
     running = true;
     const started = Date.now();
     try {
+      // One-time catch-up so projects already over the cap converge on the
+      // first cycle after startup.
+      if (!pruned) {
+        pruned = true;
+        const deleted = await pruneAllProjectFeedItems();
+        if (deleted > 0) console.log(`[feed] startup prune removed ${deleted} old feed items`);
+      }
       await runCycle(io);
     } catch (error) {
       console.error(
