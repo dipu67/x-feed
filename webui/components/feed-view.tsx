@@ -21,8 +21,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { FeedItemCard } from "@/components/feed-item-card";
 import { useTweetNotifications } from "@/hooks/use-tweet-notifications";
 import { useUser } from "@/hooks/useUser";
-import { fetchFeed } from "@/lib/api";
+import { deleteFeedItem, deleteProject, fetchFeed } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
+import { toast } from "sonner";
 import type { FeedItem } from "@/lib/types";
 
 export function FeedView() {
@@ -149,6 +150,32 @@ export function FeedView() {
     [connected],
   );
 
+  async function handleDeletePost(item: FeedItem) {
+    try {
+      await deleteFeedItem(item.id);
+      setItems((current) =>
+        (current ?? []).filter((row) => row.id !== item.id),
+      );
+      toast.success("Post removed from feed");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete post");
+    }
+  }
+
+  async function handleDeleteProject(item: FeedItem) {
+    try {
+      await deleteProject(item.project.userId);
+      setItems((current) =>
+        (current ?? []).filter((row) => row.projectId !== item.projectId),
+      );
+      toast.success(`Removed @${item.project.username}`);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to delete project",
+      );
+    }
+  }
+
   return (
     <div className="mx-auto w-full min-w-0 max-w-2xl overflow-x-clip">
       <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-background/80 px-4 py-3 backdrop-blur">
@@ -238,6 +265,8 @@ export function FeedView() {
               key={item.id}
               item={item}
               isNew={newIds.has(item.id)}
+              onDeletePost={handleDeletePost}
+              onDeleteProject={handleDeleteProject}
             />
           ))}
         </div>

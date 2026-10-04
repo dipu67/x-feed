@@ -1,16 +1,36 @@
-import type { ReactNode } from "react";
+"use client";
+
+import { useState, type ReactNode } from "react";
 import {
   ExternalLink,
   Eye,
   Heart,
   MessageCircle,
+  MoreHorizontal,
   Play,
   Quote as QuoteIcon,
   Repeat2,
   Reply as ReplyIcon,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { formatCount, formatRelativeTime } from "@/lib/format";
 import type {
   FeedItem,
@@ -291,10 +311,17 @@ function QuotedTweet({ quote }: { quote: FeedQuote }) {
 export function FeedItemCard({
   item,
   isNew = false,
+  onDeletePost,
+  onDeleteProject,
 }: {
   item: FeedItem;
   isNew?: boolean;
+  /** Removes this feed item from the feed. Omit to hide the menu action. */
+  onDeletePost?: (item: FeedItem) => Promise<void> | void;
+  /** Deletes the whole project the item belongs to (cascades its feed items). */
+  onDeleteProject?: (item: FeedItem) => Promise<void> | void;
 }) {
+  const [projectConfirmOpen, setProjectConfirmOpen] = useState(false);
   const payload = item.payload;
   // const author = payload?.author;
   const repostedBy = payload?.reposted_by;
@@ -386,6 +413,36 @@ export function FeedItemCard({
                 {item.project.chain}
               </Badge>
             ) : null}
+            {onDeletePost || onDeleteProject ? (
+              <div className="ml-auto shrink-0">
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={<Button variant="ghost" size="icon-sm" />}
+                  >
+                    <MoreHorizontal />
+                    <span className="sr-only">Open post menu</span>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {onDeletePost ? (
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onClick={() => void onDeletePost(item)}
+                      >
+                        Delete post
+                      </DropdownMenuItem>
+                    ) : null}
+                    {onDeleteProject ? (
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onClick={() => setProjectConfirmOpen(true)}
+                      >
+                        Delete project
+                      </DropdownMenuItem>
+                    ) : null}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            ) : null}
           </div>
           {replyingTo ? (
             <a
@@ -445,6 +502,34 @@ export function FeedItemCard({
           </div>
         </div>
       </div>
+      <AlertDialog
+        open={projectConfirmOpen}
+        onOpenChange={(open) => {
+          if (!open) setProjectConfirmOpen(false);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete project?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Stop tracking @{item.project.username}. All feed items from this
+              project are removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                setProjectConfirmOpen(false);
+                void onDeleteProject?.(item);
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </article>
   );
 }

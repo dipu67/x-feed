@@ -80,6 +80,13 @@ export function deleteProject(userId: string) {
   });
 }
 
+export function deleteProjects(userIds: string[]) {
+  return request<{ deleted: number; userIds: string[] }>("/projects/bulk-delete", {
+    method: "POST",
+    body: JSON.stringify({ userIds }),
+  });
+}
+
 export async function fetchFeed(
   options: { limit?: number; matched?: boolean; filter?: "mine" } = {},
 ) {
@@ -89,6 +96,12 @@ export async function fetchFeed(
   if (options.filter) params.set("filter", options.filter);
   const data = await request<{ items?: FeedItem[] }>(`/feed?${params}`);
   return { items: Array.isArray(data.items) ? data.items : [] };
+}
+
+export function deleteFeedItem(id: string) {
+  return request<{ deleted: boolean; id: string }>(`/feed/${id}`, {
+    method: "DELETE",
+  });
 }
 
 export async function fetchAuthTokens() {

@@ -8,6 +8,7 @@ import {
   Flame,
   Minus,
   RefreshCw,
+  Trash2,
   TrendingUp,
 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
@@ -21,6 +22,16 @@ import {
 } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Card,
   CardContent,
@@ -60,6 +71,7 @@ import {
 } from "@/components/ui/tooltip";
 
 import {
+  deleteProject,
   fetchGrowth,
   fetchTrend,
   type GrowthChange,
@@ -495,6 +507,10 @@ export function GrowthView() {
         <GrowthDetailDialog
           detail={detail}
           onClose={() => setDetail(null)}
+          onDeleted={() => {
+            setDetail(null);
+            void load("refresh");
+          }}
         />
       </div>
     </div>
@@ -646,19 +662,44 @@ function GrowthSkeleton() {
 function GrowthDetailDialog({
   detail,
   onClose,
+  onDeleted,
 }: {
   detail: DetailState | null;
   onClose: () => void;
+  onDeleted: () => void;
 }) {
   const open = detail !== null;
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleDelete() {
+    if (!detail) return;
+    setDeleting(true);
+    try {
+      await deleteProject(detail.user.userId);
+      toast.success(`Removed @${detail.user.username}`);
+      setConfirmOpen(false);
+      onDeleted();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to delete project",
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <Dialog
       open={open}
       onOpenChange={(nextOpen: boolean) => {
-        if (!nextOpen) onClose();
+        if (!nextOpen) {
+          setConfirmOpen(false);
+          onClose();
+        }
       }}
     >
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-xl">
         {detail ? (
           <>
             <DialogHeader>
@@ -730,7 +771,7 @@ function GrowthDetailDialog({
                         <Badge variant={variant} className="shrink-0 text-[10px]">
                           {label}
                         </Badge>
-                        <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                        <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-muted-foreground">
                           {c.field === "status" ? null : (
                             <>
                               <span className="line-through">
@@ -754,8 +795,45 @@ function GrowthDetailDialog({
             </div>
 
             <TrendSection userId={detail.user.userId} />
+
+            <div className="flex justify-end border-t pt-4">
+              <Button
+                variant="destructive"
+                onClick={() => setConfirmOpen(true)}
+              >
+                <Trash2 data-icon="inline-start" />
+                Delete project
+              </Button>
+            </div>
           </>
         ) : null}
+        <AlertDialog
+          open={confirmOpen}
+          onOpenChange={(nextOpen: boolean) => {
+            if (!nextOpen) setConfirmOpen(false);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete project?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {detail
+                  ? `Stop tracking @${detail.user.username}. Existing feed items for this project are removed.`
+                  : ""}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                disabled={deleting}
+                onClick={handleDelete}
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </DialogContent>
     </Dialog>
   );

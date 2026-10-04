@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { MoreHorizontal, Plus, Search, FolderKanban } from "lucide-react";
+import { MoreHorizontal, Plus, Search, FolderKanban, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -52,6 +53,7 @@ import { ProjectForm } from "@/components/project-form";
 import {
   createProject,
   deleteProject,
+  deleteProjects,
   fetchProjects,
   updateProject,
 } from "@/lib/api";
@@ -66,11 +68,14 @@ export function ProjectsView() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Project | null>(null);
   const [deleting, setDeleting] = useState<Project | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   async function load() {
     setError(null);
     const data = await fetchProjects();
     setProjects(data.projects ?? []);
+    setSelected(new Set());
   }
 
   useEffect(() => {
@@ -115,8 +120,38 @@ export function ProjectsView() {
     setProjects((current) =>
       (current ?? []).filter((row) => row.userId !== deleting.userId),
     );
+    setSelected((current) => {
+      if (!current.has(deleting.userId)) return current;
+      const next = new Set(current);
+      next.delete(deleting.userId);
+      return next;
+    });
     toast.success(`Removed @${deleting.username}`);
     setDeleting(null);
+  }
+
+  function toggleSelected(userId: string, checked: boolean) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (checked) next.add(userId);
+      else next.delete(userId);
+      return next;
+    });
+  }
+
+  const allVisibleSelected =
+    filtered.length > 0 && filtered.every((row) => selected.has(row.userId));
+  const someVisibleSelected = filtered.some((row) => selected.has(row.userId));
+
+  async function handleBulkDelete() {
+    const userIds = [...selected];
+    const { deleted } = await deleteProjects(userIds);
+    setProjects((current) =>
+      (current ?? []).filter((row) => !selected.has(row.userId)),
+    );
+    setSelected(new Set());
+    setBulkDeleting(false);
+    toast.success(`Removed ${deleted} project${deleted === 1 ? "" : "s"}`);
   }
 
   return (
@@ -168,9 +203,50 @@ export function ProjectsView() {
         </Empty>
       ) : (
         <div className="overflow-x-auto">
+          {selected.size > 0 ? (
+            <div className="flex items-center gap-3 border-b px-4 py-2.5">
+              <span className="text-sm text-muted-foreground">
+                {selected.size} selected
+              </span>
+              <div className="ml-auto flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelected(new Set())}
+                >
+                  Clear
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setBulkDeleting(true)}
+                >
+                  <Trash2 data-icon="inline-start" />
+                  Delete
+                </Button>
+              </div>
+            </div>
+          ) : null}
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    aria-label="Select all projects"
+                    checked={allVisibleSelected}
+                    indeterminate={someVisibleSelected && !allVisibleSelected}
+                    onCheckedChange={(checked) => {
+                      setSelected((current) => {
+                        const next = new Set(current);
+                        for (const row of filtered) {
+                          if (checked) next.add(row.userId);
+                          else next.delete(row.userId);
+                        }
+                        return next;
+                      });
+                    }}
+                  />
+                </TableHead>
                 <TableHead>Project</TableHead>
                 <TableHead>Tweets</TableHead>
                 <TableHead>Followers</TableHead>
@@ -181,6 +257,15 @@ export function ProjectsView() {
             <TableBody>
               {filtered.map((project) => (
                 <TableRow key={project.userId}>
+                  <TableCell>
+                    <Checkbox
+                      aria-label={`Select @${project.username}`}
+                      checked={selected.has(project.userId)}
+                      onCheckedChange={(checked) =>
+                        toggleSelected(project.userId, checked === true)
+                      }
+                    />
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <Avatar>
@@ -281,6 +366,30 @@ export function ProjectsView() {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={bulkDeleting}
+        onOpenChange={(open) => {
+          if (!open) setBulkDeleting(false);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete selected projects?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Stop tracking {selected.size} project
+              {selected.size === 1 ? "" : "s"}. Existing feed items for them are
+              removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={handleBulkDelete}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={Boolean(deleting)}
