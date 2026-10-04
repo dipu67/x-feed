@@ -45,12 +45,24 @@ export type FeedMediaPhoto = {
   altText?: string;
 };
 
+/** One encoded variant of a video, mirroring fxTwitter's `formats`. */
+export type FeedMediaVideoFormat = {
+  url: string;
+  container?: "mp4" | "webm" | "m3u8" | string;
+  codec?: string;
+  bitrate?: number;
+  width?: number;
+  height?: number;
+};
+
 export type FeedMediaVideo = {
   type: "video" | "gif";
   url: string;
   thumbnail_url?: string | null;
   width?: number;
   height?: number;
+  /** Present on ingested payloads — used to pick a playable mp4 variant. */
+  formats?: FeedMediaVideoFormat[];
 };
 
 export type FeedAuthor = {

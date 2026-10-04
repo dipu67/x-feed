@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   ExternalLink,
   Eye,
@@ -146,6 +146,78 @@ function mediaOf(media: FeedMedia | undefined) {
   };
 }
 
+/**
+ * Twimg media is streamed through the app's /api/media proxy — some clients
+ * can't reach video.twimg.com directly, the same reason photos go through the
+ * Next image optimizer.
+ */
+function mediaUrl(url: string): string {
+  return `/api/media?url=${encodeURIComponent(url)}`;
+}
+
+/**
+ * Ordered list of source URLs to try: h264 mp4 variants by bitrate (widely
+ * playable), then fxTwitter's top-level URL, then hevc mp4s and m3u8 (Safari
+ * only) as last resorts.
+ */
+function videoCandidates(video: FeedMediaVideo): string[] {
+  const formats = video.formats ?? [];
+  const byContainer = (container: string) =>
+    formats
+      .filter(
+        (format) =>
+          (format.container ??
+            (/\.mp4($|\?)/.test(format.url) ? "mp4" : undefined)) === container,
+      )
+      .sort((a, b) => (b.bitrate ?? 0) - (a.bitrate ?? 0))
+      .map((format) => format.url);
+  const candidates = [
+    ...byContainer("mp4").filter(
+      (url) => !formats.find((f) => f.url === url)?.codec?.includes("hevc"),
+    ),
+    video.url,
+    ...byContainer("mp4").filter((url) =>
+      formats.find((f) => f.url === url)?.codec?.includes("hevc"),
+    ),
+    ...byContainer("m3u8"),
+  ];
+  return [...new Set(candidates.filter(Boolean))];
+}
+
+/**
+ * <video> with automatic source fallback: a failed load (network hiccup,
+ * unsupported codec, unreachable host) advances to the next candidate —
+ * an errored video element never recovers on its own.
+ */
+function VideoPlayer({
+  video,
+  className,
+}: {
+  video: FeedMediaVideo;
+  className?: string;
+}) {
+  const candidates = useMemo(() => videoCandidates(video), [video]);
+  const [index, setIndex] = useState(0);
+  const current =
+    candidates[Math.min(index, candidates.length - 1)] ?? video.url;
+  return (
+    <video
+      key={current}
+      className={className}
+      src={mediaUrl(current)}
+      poster={video.thumbnail_url ? mediaUrl(video.thumbnail_url) : undefined}
+      controls
+      playsInline
+      preload="metadata"
+      onError={() =>
+        setIndex((previous) =>
+          previous < candidates.length - 1 ? previous + 1 : previous,
+        )
+      }
+    />
+  );
+}
+
 function Media({
   media,
   className,
@@ -179,14 +251,12 @@ function Media({
   }
   if (videos[0]) {
     return (
-      <video
+      <VideoPlayer
+        video={videos[0]}
         className={cn(
           "max-h-80 w-full overflow-hidden rounded-xl border",
           className,
         )}
-        src={videos[0].url}
-        poster={videos[0].thumbnail_url ?? undefined}
-        controls
       />
     );
   }
