@@ -276,3 +276,14 @@ export async function deleteProject(userId: string) {
   await prisma.project.delete({ where: { userId } });
   return { deleted: true, userId };
 }
+
+export async function deleteProjects(userIds: string[]) {
+  const unique = [
+    ...new Set(userIds.map((id) => String(id).trim()).filter(Boolean)),
+  ];
+  if (unique.length === 0) throw new HttpError(400, "userIds must not be empty");
+  const { count } = await prisma.project.deleteMany({
+    where: { userId: { in: unique } },
+  });
+  return { deleted: count, userIds: unique };
+}

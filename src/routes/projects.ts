@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   createProject,
   deleteProject,
+  deleteProjects,
   getProject,
   HttpError,
   listProjects,
@@ -78,6 +79,15 @@ projectsRouter.post("/", async (req, res) => {
   try {
     const project = await createProject(readProjectInput(req.body));
     res.status(201).json({ project });
+  } catch (error) {
+    sendError(res, error);
+  }
+});
+
+projectsRouter.post("/bulk-delete", async (req, res) => {
+  try {
+    const userIds = Array.isArray(req.body?.userIds) ? req.body.userIds : [];
+    res.json(await deleteProjects(userIds));
   } catch (error) {
     sendError(res, error);
   }

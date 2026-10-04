@@ -74,3 +74,22 @@ feedRouter.get("/", async (req, res) => {
     });
   }
 });
+
+feedRouter.delete("/:id", async (req, res) => {
+  try {
+    const { count } = await prisma.feedItem.deleteMany({
+      where: { id: req.params.id },
+    });
+    if (count === 0) {
+      res.status(404).json({ error: "Feed item not found" });
+      return;
+    }
+    res.json({ deleted: true, id: req.params.id });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Internal server error",
+    });
+  }
+});
+
