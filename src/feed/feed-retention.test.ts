@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, it, expect } from "vitest";
 import { prisma } from "../db/prisma.js";
 import {
+  FEED_ITEMS_PER_PROJECT,
   pruneAllProjectFeedItems,
   pruneProjectFeedItems,
 } from "./feed.js";
@@ -11,25 +12,34 @@ function postedAt(minutesAgo: number): Date {
   return new Date(Date.now() - minutesAgo * 60_000);
 }
 
+/** Create `n` items one minute apart; `suffix` keeps ids unique per caller. */
+async function seedItems(
+  targetProjectId: string,
+  n: number,
+  suffix: string,
+  startMinutesAgo = 1,
+) {
+  for (let i = 0; i < n; i += 1) {
+    await prisma.feedItem.create({
+      data: {
+        id: `prune-${suffix}-${Date.now()}-${i}`,
+        projectId: targetProjectId,
+        username: "u",
+        text: `post ${i}`,
+        tweetUrl: `https://x/${i}`,
+        postedAt: postedAt(startMinutesAgo + i),
+        payload: { id: `${i}` },
+      },
+    });
+  }
+}
+
 beforeAll(async () => {
   projectId = `prune-${Date.now()}`;
   await prisma.project.create({
     data: { userId: projectId, name: "P", username: `up${Date.now()}` },
   });
-  // 14 items, one per minute, so the newest 10 are unambiguous.
-  for (let i = 0; i < 14; i += 1) {
-    await prisma.feedItem.create({
-      data: {
-        id: `prune-item-${Date.now()}-${i}`,
-        projectId,
-        username: "u",
-        text: `post ${i}`,
-        tweetUrl: `https://x/${i}`,
-        postedAt: postedAt(i + 1),
-        payload: { id: `${i}` },
-      },
-    });
-  }
+  await seedItems(projectId, 14, "main");
 });
 
 afterAll(async () => {
@@ -38,8 +48,8 @@ afterAll(async () => {
 });
 
 describe("pruneProjectFeedItems", () => {
-  it("keeps the newest 10 and deletes older ones", async () => {
-    const deleted = await pruneProjectFeedItems(projectId);
+  it("keeps the newest `keep` items and deletes older ones", async () => {
+    const deleted = await pruneProjectFeedItems(projectId, 10);
     expect(deleted).toBe(4);
 
     const remaining = await prisma.feedItem.findMany({
@@ -62,8 +72,26 @@ describe("pruneProjectFeedItems", () => {
   });
 
   it("is a no-op when the project is within the cap", async () => {
-    const deleted = await pruneProjectFeedItems(projectId);
+    const deleted = await pruneProjectFeedItems(projectId, 10);
     expect(deleted).toBe(0);
+  });
+
+  it("defaults to FEED_ITEMS_PER_PROJECT", async () => {
+    const freshProjectId = `prune-default-${Date.now()}`;
+    await prisma.project.create({
+      data: { userId: freshProjectId, name: "D", username: `ud${Date.now()}` },
+    });
+    try {
+      await seedItems(freshProjectId, FEED_ITEMS_PER_PROJECT + 2, "default");
+      const deleted = await pruneProjectFeedItems(freshProjectId);
+      expect(deleted).toBe(2);
+      const remaining = await prisma.feedItem.count({
+        where: { projectId: freshProjectId },
+      });
+      expect(remaining).toBe(FEED_ITEMS_PER_PROJECT);
+    } finally {
+      await prisma.project.delete({ where: { userId: freshProjectId } });
+    }
   });
 
   it("returns 0 for a project without feed items", async () => {
@@ -81,23 +109,12 @@ describe("pruneProjectFeedItems", () => {
 
 describe("pruneAllProjectFeedItems", () => {
   it("prunes every project over the cap", async () => {
-    // Refill the project over the cap (14 items again after the earlier prune).
-    for (let i = 0; i < 8; i += 1) {
-      await prisma.feedItem.create({
-        data: {
-          id: `prune-refill-${Date.now()}-${i}`,
-          projectId,
-          username: "u",
-          text: `old ${i}`,
-          tweetUrl: `https://x/old/${i}`,
-          postedAt: postedAt(100 + i),
-          payload: { id: `old-${i}` },
-        },
-      });
-    }
+    // Push the test project back over the default cap; pruneAll must bring
+    // it down to exactly FEED_ITEMS_PER_PROJECT.
+    await seedItems(projectId, 8, "refill", 200);
     const deleted = await pruneAllProjectFeedItems();
-    expect(deleted).toBeGreaterThanOrEqual(4);
+    expect(deleted).toBeGreaterThanOrEqual(3);
     const count = await prisma.feedItem.count({ where: { projectId } });
-    expect(count).toBe(10);
+    expect(count).toBe(FEED_ITEMS_PER_PROJECT);
   });
 });

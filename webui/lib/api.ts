@@ -88,14 +88,25 @@ export function deleteProjects(userIds: string[]) {
 }
 
 export async function fetchFeed(
-  options: { limit?: number; matched?: boolean; filter?: "mine" } = {},
+  options: {
+    limit?: number;
+    offset?: number;
+    matched?: boolean;
+    filter?: "mine";
+  } = {},
 ) {
-  const limit = options.limit ?? 80;
+  const limit = options.limit ?? 20;
   const params = new URLSearchParams({ limit: String(limit) });
+  if (options.offset) params.set("offset", String(options.offset));
   if (options.matched) params.set("matched", "1");
   if (options.filter) params.set("filter", options.filter);
-  const data = await request<{ items?: FeedItem[] }>(`/feed?${params}`);
-  return { items: Array.isArray(data.items) ? data.items : [] };
+  const data = await request<{ items?: FeedItem[]; hasMore?: boolean }>(
+    `/feed?${params}`,
+  );
+  return {
+    items: Array.isArray(data.items) ? data.items : [],
+    hasMore: data.hasMore === true,
+  };
 }
 
 export function deleteFeedItem(id: string) {

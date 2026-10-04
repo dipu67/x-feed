@@ -14,17 +14,26 @@ feedRouter.get("/", async (req, res) => {
     const limit = Number.isFinite(rawLimit)
       ? Math.min(Math.max(rawLimit, 1), 200)
       : 50;
+    const rawOffset = Number(req.query.offset ?? 0);
+    const offset =
+      Number.isFinite(rawOffset) && rawOffset > 0
+        ? Math.floor(rawOffset)
+        : 0;
 
     const matchedOnly = ["1", "true"].includes(String(req.query.matched ?? ""));
 
+    // One extra row answers hasMore without a separate count query.
     const items = await prisma.feedItem.findMany({
-      take: limit,
+      take: limit + 1,
+      skip: offset,
       orderBy: { detectedAt: "desc" },
       include: { project: true },
       ...(matchedOnly ? { where: { matchedCount: { gt: 0 } } } : {}),
     });
+    const hasMore = items.length > limit;
+    const page = hasMore ? items.slice(0, limit) : items;
 
-    let visible = items;
+    let visible = page;
     if (req.query.filter === "mine") {
       const user = req.user!;
       const [follows, filters, mutes] = await Promise.all([
@@ -44,6 +53,7 @@ feedRouter.get("/", async (req, res) => {
     }
 
     res.json({
+      hasMore,
       items: visible.map((item) => ({
         id: item.id,
         projectId: item.projectId,

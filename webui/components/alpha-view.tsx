@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Zap } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -11,11 +11,21 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FeedItemCard } from "@/components/feed-item-card";
 import { getSocket } from "@/lib/socket";
 import { fetchFeed } from "@/lib/api";
 import type { FeedItem } from "@/lib/types";
+
+const PAGE_SIZE = 20;
 
 export function AlphaView() {
   const [items, setItems] = useState<FeedItem[]>([]);
@@ -23,22 +33,34 @@ export function AlphaView() {
   const [connected, setConnected] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  // New socket posts seen while reading a page deeper than 1; they are only
+  // counted there so visible page content never shifts mid-read.
+  const [pendingNew, setPendingNew] = useState(0);
 
   const seenRef = useRef<Set<string>>(new Set());
   const socketRef = useRef<ReturnType<typeof getSocket> | null>(null);
+  const pageRef = useRef(1);
+
+  const loadPage = useCallback(async (targetPage: number) => {
+    const data = await fetchFeed({
+      matched: true,
+      limit: PAGE_SIZE,
+      offset: (targetPage - 1) * PAGE_SIZE,
+    });
+    const rows = data.items ?? [];
+    rows.forEach((row) => seenRef.current.add(row.id));
+    setItems(rows);
+    setHasMore(data.hasMore);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
-    fetchFeed({ matched: true })
-      .then((data) => {
-        if (cancelled) return;
-        const rows = data.items ?? [];
-        rows.forEach((row) => seenRef.current.add(row.id));
-        setItems((current) => {
-          const fetched = new Set(rows.map((row) => row.id));
-          const live = (current ?? []).filter((row) => !fetched.has(row.id));
-          return [...live, ...rows];
-        });
+    setLoading(true);
+    loadPage(page)
+      .then(() => {
+        if (!cancelled) setError(null);
       })
       .catch((err: unknown) => {
         if (!cancelled) {
@@ -51,7 +73,7 @@ export function AlphaView() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [page, loadPage]);
 
   useEffect(() => {
     // Singleton socket shared with the feed view; the server joins per-user
@@ -64,18 +86,9 @@ export function AlphaView() {
 
     const onConnect = () => {
       setConnected(true);
-      // After a reconnect, re-fetch to catch matched items missed offline.
-      fetchFeed({ matched: true })
-        .then((data) => {
-          const rows = data.items ?? [];
-          rows.forEach((row) => seenRef.current.add(row.id));
-          setItems((current) => {
-            const fetched = new Set(rows.map((row) => row.id));
-            const live = (current ?? []).filter((row) => !fetched.has(row.id));
-            return [...live, ...rows];
-          });
-        })
-        .catch(() => {});
+      // After a reconnect, re-fetch the current page to catch matched items
+      // missed offline.
+      loadPage(pageRef.current).catch(() => {});
     };
     const onDisconnect = () => setConnected(false);
     const onFeedNew = (item: FeedItem) => {
@@ -84,6 +97,10 @@ export function AlphaView() {
       if (seenRef.current.has(item.id)) return;
       seenRef.current.add(item.id);
 
+      if (pageRef.current !== 1) {
+        setPendingNew((current) => current + 1);
+        return;
+      }
       setItems((current) => [item, ...(current ?? [])]);
       setNewIds((current) => {
         const next = new Set(current);
@@ -108,7 +125,14 @@ export function AlphaView() {
       socket.off("disconnect", onDisconnect);
       socket.off("feed:new", onFeedNew);
     };
-  }, []);
+  }, [loadPage]);
+
+  function gotoPage(next: number) {
+    pageRef.current = next;
+    setPage(next);
+    setPendingNew(0);
+    window.scrollTo({ top: 0 });
+  }
 
   // Android Chrome freezes background tabs — reconnect when the user returns.
   useEffect(() => {
@@ -185,6 +209,56 @@ export function AlphaView() {
           ))}
         </div>
       )}
+
+      {!loading && (page > 1 || hasMore) ? (
+        <Pagination className="border-t py-4">
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationPrevious
+                href="#"
+                aria-disabled={page === 1}
+                className={page === 1 ? "pointer-events-none opacity-50" : undefined}
+                onClick={(event) => {
+                  event.preventDefault();
+                  if (page > 1) gotoPage(page - 1);
+                }}
+              />
+            </PaginationItem>
+            <PaginationItem>
+              <PaginationLink
+                href="#"
+                isActive
+                onClick={(event) => event.preventDefault()}
+              >
+                {page}
+              </PaginationLink>
+            </PaginationItem>
+            {pendingNew > 0 ? (
+              <PaginationItem>
+                <button
+                  type="button"
+                  onClick={() => gotoPage(1)}
+                  className="px-2 text-xs text-muted-foreground underline-offset-2 hover:underline"
+                >
+                  {pendingNew} new post{pendingNew === 1 ? "" : "s"} — back to
+                  page 1
+                </button>
+              </PaginationItem>
+            ) : null}
+            <PaginationItem>
+              <PaginationNext
+                href="#"
+                aria-disabled={!hasMore}
+                className={!hasMore ? "pointer-events-none opacity-50" : undefined}
+                onClick={(event) => {
+                  event.preventDefault();
+                  if (hasMore) gotoPage(page + 1);
+                }}
+              />
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
+      ) : null}
     </div>
   );
 }

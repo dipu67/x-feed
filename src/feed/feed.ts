@@ -44,7 +44,7 @@ const CYCLE_MS =  60 * 1000; // every 60s
 
 /** Maximum feed items stored per project; older posts are pruned when a
  * newer one is persisted. */
-const FEED_ITEMS_PER_PROJECT = 5;
+export const FEED_ITEMS_PER_PROJECT = 5;
 
 let lastRollupPruneDay: string | null = null;
 
@@ -61,8 +61,8 @@ export async function pruneRollupsDaily(now: Date = new Date()): Promise<void> {
 }
 
 /** Keep only the newest `keep` feed items for one project, by postedAt.
- * Items sharing the 10th-newest postedAt are never deleted, so the count can
- * slightly exceed the cap on identical timestamps. */
+ * Items sharing the `keep`-th newest postedAt are never deleted, so the count
+ * can slightly exceed the cap on identical timestamps. */
 export async function pruneProjectFeedItems(
   projectId: string,
   keep: number = FEED_ITEMS_PER_PROJECT,
