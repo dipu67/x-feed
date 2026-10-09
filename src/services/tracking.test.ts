@@ -1,6 +1,10 @@
 import { afterAll, describe, it, expect } from "vitest";
 import { prisma } from "../db/prisma.js";
-import { applyUserPresence, type ProjectSnapshotInput } from "./tracking.js";
+import {
+  applyFeedTick,
+  applyUserPresence,
+  type ProjectSnapshotInput,
+} from "./tracking.js";
 import { pruneRollupsDaily } from "../feed/feed.js";
 import type { UserData } from "../TwitterClient/types.js";
 
@@ -72,6 +76,57 @@ describe("applyUserPresence rollup writes", () => {
     const hourRow = afterSecond.find((r) => r.granularity === "hour");
     expect(hourRow?.followers).toBe(101);
     expect(hourRow?.tweets).toBe(11);
+  });
+});
+
+describe("applyFeedTick", () => {
+  const feedId = `rollup-test-feed-${Date.now()}`;
+
+  it("updates the tweet count and leaves follower growth untouched", async () => {
+    await prisma.project.create({
+      data: {
+        userId: feedId,
+        name: "F",
+        username: "rolluptestfeed",
+        followers: 100,
+        following: 40,
+        tweets: 5,
+        status: "suspended",
+        missedChecks: 2,
+      },
+    });
+
+    const { statusChanged } = await applyFeedTick(
+      input({
+        userId: feedId,
+        username: "rolluptestfeed",
+        followers: 100,
+        following: 40,
+        tweets: 5,
+        status: "suspended",
+        missedChecks: 2,
+      }),
+      user(900, 80, 9),
+    );
+
+    expect(statusChanged).toBe(true);
+    const project = await prisma.project.findUniqueOrThrow({
+      where: { userId: feedId },
+    });
+    expect(project.tweets).toBe(9);
+    expect(project.followers).toBe(100);
+    expect(project.following).toBe(40);
+    expect(project.missedChecks).toBe(0);
+    expect(project.status).toBe("active");
+
+    const rollups = await prisma.projectMetricRollup.findMany({
+      where: { projectId: feedId },
+    });
+    expect(rollups).toHaveLength(0);
+    const changes = await prisma.projectChange.findMany({
+      where: { projectId: feedId },
+    });
+    expect(changes.map((change) => change.field)).toEqual(["status"]);
   });
 });
 

@@ -117,9 +117,13 @@ export type PresenceResult = {
  *   - emit a ProjectChange row for each field that moved (metric rows are
  *     coalesced inside a 10-min window so an account gaining 100s of
  *     followers per hour doesn't blow up the table)
- *   - upsert the current hour/day ProjectMetricRollup buckets every cycle
+ *   - upsert the current hour/day ProjectMetricRollup buckets
  *     (a jittering counter updates the bucket instead of creating rows)
  *   - reset missedChecks (the user is visible to X)
+ *
+ * The feed worker calls this on the growth interval (default 1 hour), not
+ * on every 60s tweet poll. Between snapshots, `applyFeedTick` keeps the
+ * tweet count fresh so new posts are still detected every minute.
  */
 export async function applyUserPresence(
   project: ProjectSnapshotInput,
@@ -238,6 +242,50 @@ export async function applyUserPresence(
   }
 
   return { changes: insertedChanges, statusChanged };
+}
+
+/**
+ * Feed-cycle update for a user X returned. The 60s poll needs a fresh tweet
+ * count to know when to pull new posts, and a present user must reset the
+ * suspension debounce. Follower, following, profile fields, metric change
+ * rows, and rollups stay untouched until the next growth snapshot.
+ */
+export async function applyFeedTick(
+  project: ProjectSnapshotInput,
+  user: UserData,
+): Promise<{ statusChanged: boolean }> {
+  const now = new Date();
+  const statusChanged = project.status !== "active";
+
+  await prisma.project.update({
+    where: { userId: project.userId },
+    data: {
+      tweets: user.tweetCount ?? project.tweets,
+      lastSeenAt: now,
+      missedChecks: 0,
+      ...(statusChanged
+        ? {
+            status: "active",
+            statusReason: null,
+            statusChangedAt: now,
+          }
+        : {}),
+    },
+  });
+
+  if (statusChanged) {
+    await prisma.projectChange.create({
+      data: {
+        projectId: project.userId,
+        field: "status",
+        oldValue: project.status,
+        newValue: "active",
+        changedAt: now,
+      },
+    });
+  }
+
+  return { statusChanged };
 }
 
 /**

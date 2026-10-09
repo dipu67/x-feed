@@ -17,6 +17,12 @@ import { getTwitterClient } from "../twitter/getClient.js";
 import { CircuitBreaker } from "../twitter/circuit-breaker.js";
 import { withCircuitBreaker } from "./circuit-wrapped-call.js";
 import {
+  formatGrowthInterval,
+  getGrowthSchedule,
+  markGrowthRecorded,
+} from "../services/growth-schedule.js";
+import {
+  applyFeedTick,
   applyUserAbsence,
   applyUserPresence,
   type ProjectSnapshotInput,
@@ -40,7 +46,8 @@ function getDispatcher(io: FeedSocket): PushDispatcher {
 }
 
 const BATCH_SIZE = 100;
-const CYCLE_MS =  60 * 1000; // every 60s
+/** Tweet poll. Growth snapshots use TrackerSettings.growthIntervalMs. */
+const CYCLE_MS = 60 * 1000;
 
 /** Maximum feed items stored per project; older posts are pruned when a
  * newer one is persisted. */
@@ -250,6 +257,10 @@ async function runCycle(io: FeedSocket): Promise<void> {
   const keywords = await prisma.keyword.findMany({ where: { enabled: true } });
   const matcher = compileKeywordMatcher(keywords);
 
+  const schedule = await getGrowthSchedule();
+  const recordGrowth = schedule.due;
+  let sawGrowth = false;
+
   const byUserId = new Map(projects.map((project) => [project.userId, project]));
   const { client, accountId } = await getTwitterClient();
   const readBreaker = readBreakerFor(accountId);
@@ -315,14 +326,32 @@ async function runCycle(io: FeedSocket): Promise<void> {
         );
       }
 
-      // Persist metrics + profile fields via the tracking service: it writes
-      // rollups every cycle and records profile/status changes per event.
-      // Reset missedChecks (the user is visible to X).
+      // Tweet count is always written so the next minute can see new posts.
+      // Follower, following, profile, and rollup rows wait for the growth
+      // interval (default 1 hour, editable on the growth page).
       const trackingInput = toTrackingInput(project, user);
-      const { changes, statusChanged } = await applyUserPresence(
-        trackingInput,
-        user,
-      );
+      if (recordGrowth) {
+        const { changes, statusChanged } = await applyUserPresence(
+          trackingInput,
+          user,
+        );
+        sawGrowth = true;
+        if (changes.length > 0) {
+          console.log(
+            `[feed] @${project.username} changed: ${changes
+              .map((c) => c.field)
+              .join(", ")}`,
+          );
+        }
+        if (statusChanged) {
+          console.log(`[feed] @${project.username} back to active`);
+        }
+      } else {
+        const { statusChanged } = await applyFeedTick(trackingInput, user);
+        if (statusChanged) {
+          console.log(`[feed] @${project.username} back to active`);
+        }
+      }
 
       await prisma.project.update({
         where: { userId: project.userId },
@@ -331,17 +360,6 @@ async function runCycle(io: FeedSocket): Promise<void> {
           lastFetchedAt: new Date(),
         },
       });
-
-      if (changes.length > 0) {
-        console.log(
-          `[feed] @${project.username} changed: ${changes
-            .map((c) => c.field)
-            .join(", ")}`,
-        );
-      }
-      if (statusChanged) {
-        console.log(`[feed] @${project.username} back to active`);
-      }
     }
 
     // Absence pass: any requested id X did not return for this successful
@@ -362,6 +380,13 @@ async function runCycle(io: FeedSocket): Promise<void> {
     if (result.rateLimit && result.rateLimit.remaining <= 0) {
       await waitForRateLimit(result.rateLimit.reset);
     }
+  }
+
+  if (recordGrowth && sawGrowth) {
+    await markGrowthRecorded();
+    console.log(
+      `[growth] snapshotted metrics (every ${formatGrowthInterval(schedule.growthIntervalMs)})`,
+    );
   }
 }
 

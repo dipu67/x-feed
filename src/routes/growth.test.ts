@@ -5,6 +5,7 @@ import { prisma } from "../db/prisma.js";
 import { hashPassword } from "../auth/password.js";
 import { createSession } from "../auth/sessions.js";
 import { hourBucketStart, dayBucketStart } from "../lib/bucket.js";
+import { DEFAULT_GROWTH_INTERVAL_MS, setGrowthInterval } from "../services/growth-schedule.js";
 import type { Server } from "node:http";
 
 let app: Server;
@@ -25,7 +26,7 @@ beforeAll(async () => {
   cookie = `xfeed_session=${token}`;
 
   await prisma.project.create({
-    data: { userId: projectId, name: "G", username: "growthroutetest" },
+    data: { userId: projectId, name: "G", username: `grt${projectId}` },
   });
   const now = Date.now();
   const HOUR = 60 * 60 * 1000;
@@ -69,6 +70,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await setGrowthInterval(DEFAULT_GROWTH_INTERVAL_MS);
   await prisma.projectMetricRollup.deleteMany({
     where: { projectId: { startsWith: "growth-route-" } },
   });
@@ -106,6 +108,49 @@ describe("GET /growth baselines from rollups", () => {
     );
     // Earliest daily bucket (900) is the all-time baseline.
     expect(row.followersDelta).toBe(200);
+  });
+});
+
+describe("growth snapshot interval", () => {
+  it("401 for anonymous requests", async () => {
+    await request(app).get("/growth/settings").expect(401);
+    await request(app)
+      .patch("/growth/settings")
+      .send({ growthIntervalMs: DEFAULT_GROWTH_INTERVAL_MS })
+      .expect(401);
+  });
+
+  it("defaults to 1 hour and accepts a preset from the growth page", async () => {
+    const initial = await request(app)
+      .patch("/growth/settings")
+      .set("Cookie", cookie)
+      .send({ growthIntervalMs: DEFAULT_GROWTH_INTERVAL_MS })
+      .expect(200);
+    expect(initial.body.growthIntervalMs).toBe(60 * 60 * 1000);
+    expect(initial.body.presets.map((preset: { label: string }) => preset.label)).toContain(
+      "1 hour",
+    );
+
+    const updated = await request(app)
+      .patch("/growth/settings")
+      .set("Cookie", cookie)
+      .send({ growthIntervalMs: 15 * 60 * 1000 })
+      .expect(200);
+    expect(updated.body.growthIntervalMs).toBe(15 * 60 * 1000);
+
+    const read = await request(app)
+      .get("/growth/settings")
+      .set("Cookie", cookie)
+      .expect(200);
+    expect(read.body.growthIntervalMs).toBe(15 * 60 * 1000);
+  });
+
+  it("rejects an interval that is not a preset", async () => {
+    await request(app)
+      .patch("/growth/settings")
+      .set("Cookie", cookie)
+      .send({ growthIntervalMs: 90_000 })
+      .expect(400);
   });
 });
 

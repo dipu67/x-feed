@@ -4,10 +4,46 @@ import { requireUser } from "../auth/middleware.js";
 import { Prisma } from "../generated/prisma/client.js";
 import type { TrendRange } from "../lib/bucket.js";
 import { trendWindow, parseTrendRange } from "../lib/bucket.js";
+import {
+  getGrowthSchedule,
+  GrowthIntervalError,
+  parseGrowthInterval,
+  serializeGrowthSettings,
+  setGrowthInterval,
+} from "../services/growth-schedule.js";
 
 export const growthRouter = Router();
 
 growthRouter.use(requireUser);
+
+growthRouter.get("/settings", async (_req, res) => {
+  try {
+    const schedule = await getGrowthSchedule();
+    res.json(serializeGrowthSettings(schedule));
+  } catch (error) {
+    console.error("[growth:settings]", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Internal server error",
+    });
+  }
+});
+
+growthRouter.patch("/settings", async (req, res) => {
+  try {
+    const ms = parseGrowthInterval(req.body?.growthIntervalMs);
+    const saved = await setGrowthInterval(ms);
+    res.json(serializeGrowthSettings(saved));
+  } catch (error) {
+    if (error instanceof GrowthIntervalError) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    console.error("[growth:settings]", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Internal server error",
+    });
+  }
+});
 
 export const RANGE_KEYS = ["1h", "12h", "24h", "7d", "all"] as const;
 export type RangeKey = (typeof RANGE_KEYS)[number];

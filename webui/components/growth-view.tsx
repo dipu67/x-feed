@@ -73,10 +73,13 @@ import {
 import {
   deleteProject,
   fetchGrowth,
+  fetchGrowthSettings,
   fetchTrend,
+  updateGrowthSettings,
   type GrowthChange,
   type GrowthRange,
   type GrowthResponse,
+  type GrowthSettings,
   type GrowthUser,
   type TrendPoint,
   type TrendRange,
@@ -108,6 +111,20 @@ const FIELD_LABELS: Record<string, string> = {
 
 function rangeLabel(range: GrowthRange): string {
   return RANGES.find((r) => r.key === range)?.label ?? range;
+}
+
+function snapshotHint(settings: GrowthSettings): string {
+  if (!settings.growthRecordedAt || settings.due || !settings.nextGrowthAt) {
+    return "Next snapshot on the next feed check";
+  }
+  const delta = new Date(settings.nextGrowthAt).getTime() - Date.now();
+  if (delta <= 0) return "Next snapshot on the next feed check";
+  const mins = Math.max(1, Math.round(delta / 60_000));
+  if (mins < 60) return `Next snapshot in ${mins}m`;
+  const hours = Math.floor(mins / 60);
+  const rem = mins % 60;
+  if (rem === 0) return `Next snapshot in ${hours}h`;
+  return `Next snapshot in ${hours}h ${rem}m`;
 }
 
 function formatDelta(value: number): {
@@ -342,18 +359,24 @@ export function GrowthView() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [detail, setDetail] = useState<DetailState | null>(null);
+  const [settings, setSettings] = useState<GrowthSettings | null>(null);
+  const [savingInterval, setSavingInterval] = useState(false);
 
   const load = useCallback(
     async (mode: "initial" | "refresh" = "initial") => {
       if (mode === "initial") setLoading(true);
       else setRefreshing(true);
       try {
-        const result = await fetchGrowth({
-          range,
-          sortBy: "userId",
-          sortOrder,
-        });
+        const [result, nextSettings] = await Promise.all([
+          fetchGrowth({
+            range,
+            sortBy: "userId",
+            sortOrder,
+          }),
+          fetchGrowthSettings(),
+        ]);
         setData(result);
+        setSettings(nextSettings);
       } catch (error) {
         toast.error(
           error instanceof Error ? error.message : "Failed to load growth data",
@@ -365,6 +388,23 @@ export function GrowthView() {
     },
     [range, sortOrder],
   );
+
+  const onIntervalChange = useCallback(async (ms: number) => {
+    setSavingInterval(true);
+    try {
+      const next = await updateGrowthSettings(ms);
+      setSettings(next);
+      const label =
+        next.presets.find((preset) => preset.ms === ms)?.label ?? "updated";
+      toast.success(`Growth snapshots every ${label}`);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to save growth interval",
+      );
+    } finally {
+      setSavingInterval(false);
+    }
+  }, []);
 
   useEffect(() => {
     void load("initial");
@@ -400,8 +440,36 @@ export function GrowthView() {
     <div className="flex flex-1 flex-col">
       <PageHeader
         title="Growth"
-        description="Follower, following, and tweet growth across tracked accounts"
+        description="Follower and following counts snapshot on an interval. Tweets are checked every minute."
       >
+        <div className="flex flex-col items-start gap-0.5">
+          <label
+            htmlFor="growth-interval"
+            className="flex items-center gap-2 text-xs text-muted-foreground"
+          >
+            Snapshot every
+            <select
+              id="growth-interval"
+              aria-label="Growth snapshot interval"
+              className="h-8 rounded-lg border border-border bg-background px-2 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 dark:border-input dark:bg-input/30"
+              value={settings ? String(settings.growthIntervalMs) : ""}
+              disabled={!settings || savingInterval || loading}
+              onChange={(event) => {
+                const ms = Number(event.target.value);
+                if (Number.isInteger(ms)) void onIntervalChange(ms);
+              }}
+            >
+              {(settings?.presets ?? []).map((preset) => (
+                <option key={preset.ms} value={preset.ms}>
+                  {preset.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className="text-[10px] text-muted-foreground">
+            {settings ? snapshotHint(settings) : "Feed checks tweets every minute"}
+          </span>
+        </div>
         <Tabs
           value={sortOrder}
           onValueChange={(v: string) => setSortOrder(v as SortOrder)}

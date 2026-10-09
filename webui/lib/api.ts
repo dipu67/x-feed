@@ -384,6 +384,30 @@ export function fetchTrend(userId: string, range: TrendRange) {
   return request<TrendResponse>(`/growth/trend?${q.toString()}`);
 }
 
+export type GrowthIntervalPreset = {
+  ms: number;
+  label: string;
+};
+
+export type GrowthSettings = {
+  growthIntervalMs: number;
+  growthRecordedAt: string | null;
+  nextGrowthAt: string | null;
+  due: boolean;
+  presets: GrowthIntervalPreset[];
+};
+
+export function fetchGrowthSettings() {
+  return request<GrowthSettings>("/growth/settings");
+}
+
+export function updateGrowthSettings(growthIntervalMs: number) {
+  return request<GrowthSettings>("/growth/settings", {
+    method: "PATCH",
+    body: JSON.stringify({ growthIntervalMs }),
+  });
+}
+
 // ── Admin (x-admin-token gated) ───────────────────────────────────────────
 
 export type Invite = {

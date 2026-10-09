@@ -276,3 +276,15 @@ model TelegramBinding {
   @@index([userId])
   @@map("telegram_bindings")
 }
+
+/// Cadence for growth snapshots. One row, id = "default".
+/// Feed tweets stay on the 60s poll in src/feed/feed.ts. Follower, following,
+/// profile, and rollup writes wait until `growthIntervalMs` has elapsed.
+model TrackerSettings {
+  id               String    @id
+  growthIntervalMs Int       @default(3600000) @map("growth_interval_ms")
+  growthRecordedAt DateTime? @map("growth_recorded_at") @db.Timestamptz
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("tracker_settings")
+}
